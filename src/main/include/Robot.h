@@ -6,17 +6,27 @@
 
 #include <string>
 
+#include <wpi/sendable/Sendable.h>
+#include <wpi/sendable/SendableBuilder.h>
 #include <frc/TimedRobot.h>
 #include <frc/smartdashboard/SendableChooser.h>
 #include <frc/SerialPort.h>
 #include <ctre/phoenix/motorcontrol/can/WPI_TalonFX.h>
 
+#include "SenderNT.h"
+
 #define BUF_SIZE 13
 #define MOTOR_COUNT 1
+#define LOG_LOCAL_TELEMETRY true
+#define MC_SENDABLE_TELEMETRY true
+#define SENDABLE_TELEMETRY_RATE 100_ms
 
-class Robot : public frc::TimedRobot {
+class Robot : public frc::TimedRobot, wpi::Sendable {
  public:
+  Robot();
+
   char* itoa(int i, char b[]);
+
   void RobotInit() override;
   void RobotPeriodic() override;
   void AutonomousInit() override;
@@ -30,14 +40,21 @@ class Robot : public frc::TimedRobot {
   void SimulationInit() override;
   void SimulationPeriodic() override;
 
+  void InitSendable(wpi::SendableBuilder&) override;
+
  private:
   frc::SerialPort serial = frc::SerialPort(230400);
   char * input_buffer = (char *)malloc(sizeof(char) * BUF_SIZE);
   uint16_t input_i = 0;
-  char * xon = (char *)malloc(sizeof(char) * 1);
+  char * xon = (char *)malloc(sizeof(char) * 1);          // might wanna const and default initialize these
   char * xoff = (char *)malloc(sizeof(char) * 1);
   char * time_buffer = (char *)malloc(sizeof(char) * 13);
   bool serial_enable = false;
 
-  ctre::phoenix::motorcontrol::can::TalonFX motors[MOTOR_COUNT] = {ctre::phoenix::motorcontrol::can::TalonFX(1)};
+  ctre::phoenix::motorcontrol::can::TalonFX motors[MOTOR_COUNT] = { ctre::phoenix::motorcontrol::can::TalonFX(1) };
+#if(MC_SENDABLE_TELEMETRY)
+  std::vector<float> sendable_buffers[8] = {};
+  SenderNT sender{ "Robot Telemetry" };
+#endif
+
 };
