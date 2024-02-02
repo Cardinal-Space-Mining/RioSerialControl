@@ -17,6 +17,13 @@ using std::chrono::milliseconds;
 using std::chrono::seconds;
 using std::chrono::system_clock;
 
+
+/**
+ * Convert int to character, google itoa
+ * @param i
+ * @param b
+ * @return
+ */
 char* Robot::itoa(int i, char b[]){
     char const digit[] = "0123456789";
     char* p = b;
@@ -37,45 +44,59 @@ char* Robot::itoa(int i, char b[]){
     return b;
 }
 
+/**
+ * Define constants
+ * xon & xoff start end commands for RIO
+ */
 void Robot::RobotInit() {
   serial.SetTimeout(units::second_t(.1));
   // serial.Reset();
   xon[0] = 0x11;
   xoff[0] = 0x13;
 
+  // disable all motors
   for (int i = 0; i < MOTOR_COUNT; i++)
   {
     motors[i].Set(ctre::phoenix::motorcontrol::ControlMode::Disabled, 0);
   }
 
+  // runs every 1 millisec
+  // this is what is actually reading input
   AddPeriodic([&] {
     if (serial_enable)
     {
-      if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x11)
+      if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x11) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
       {
         
-        serial.Write(xon, 1);
-        if (serial.Read(input_buffer, 4))
+        serial.Write(xon, 1); // response to being on
+        if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
         {
           int * function_number = (int *)input_buffer;
-          switch (*function_number)
+          switch (*function_number) // choosing what to do based on opcode
           {
             case 0:
-              serial.Read(input_buffer, 16);
-              int * motor_number   = (int *)(input_buffer);
-              int * mode           = (int *)(input_buffer + 4);
-              double * outputValue = (double *)(input_buffer + 8);
-              motors[*motor_number].Set((ctre::phoenix::motorcontrol::ControlMode)*mode, *outputValue);
+              serial.Read(input_buffer, 16); // could be different based on opcode
+              int * motor_number   = (int *)(input_buffer);         // which motor for command
+              int * mode           = (int *)(input_buffer + 4);     // velocity/motion magic (enums)
+              double * outputValue = (double *)(input_buffer + 8);  // percent/value
+              motors[*motor_number].Set((ctre::phoenix::motorcontrol::ControlMode)*mode, *outputValue); // controlling motors
+              break;
           }
-          serial.Write(xoff, 1);
+          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
         }
       }
     }
   }, 1_ms);
 }
 
+/**
+ * eventually maybe not do this
+ */
 void Robot::RobotPeriodic() {}
 
+/**
+ * Zeroing out all motors and enables serial to listen for opcodes
+ */
 void Robot::AutonomousInit() {
   // serial.Reset();
   for (int i = 0; i < MOTOR_COUNT; i++)
@@ -85,14 +106,26 @@ void Robot::AutonomousInit() {
   serial_enable = true;
 }
 
+/**
+ * does nothing for now
+ */
 void Robot::AutonomousPeriodic() {}
 
+/**
+ * dont listen to serial, manual control of rover
+ */
 void Robot::TeleopInit() {
   serial_enable = false;
 }
 
+/**
+ * nothing, will eventuall put here
+ */
 void Robot::TeleopPeriodic() {}
 
+/**
+ * Turns off all motors when disabled
+ */
 void Robot::DisabledInit() {
   serial_enable = false;
   for (int i = 0; i < MOTOR_COUNT; i++)
@@ -101,6 +134,9 @@ void Robot::DisabledInit() {
   }
 }
 
+/**
+ * nothing until next major block
+ */
 void Robot::DisabledPeriodic() {}
 
 void Robot::TestInit() {}
@@ -110,6 +146,9 @@ void Robot::TestPeriodic() {}
 void Robot::SimulationInit() {}
 
 void Robot::SimulationPeriodic() {}
+/**
+ * end of nothing block
+ */
 
 #ifndef RUNNING_FRC_TESTS
 int main() {
