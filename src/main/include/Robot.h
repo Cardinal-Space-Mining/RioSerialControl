@@ -13,7 +13,10 @@
 
 using namespace ctre::phoenix6;
 
-#define BUF_SIZE 13
+#define BUF_SIZE 16
+
+constexpr const char XON = 0x11;
+constexpr const char XOFF = 0x13;
 
 class Robot : public frc::TimedRobot {
  public:
@@ -31,16 +34,14 @@ class Robot : public frc::TimedRobot {
   void SimulationInit() override;
   void SimulationPeriodic() override;
 
+protected:
   void DisableAllMotors();
+
+  void SerialPeriodic();
 
  private:
   frc::SerialPort serial = frc::SerialPort(230400);
-  char * input_buffer = (char *)malloc(sizeof(char) * BUF_SIZE);
-  uint16_t input_i = 0;
-  char * xon = (char *)malloc(sizeof(char) * 1);
-  char * xoff = (char *)malloc(sizeof(char) * 1);
-  char * time_buffer = (char *)malloc(sizeof(char) * 13);
+  char input_buffer[BUF_SIZE];
   bool serial_enable = false;
-
   std::vector<hardware::TalonFX> motors;
 };

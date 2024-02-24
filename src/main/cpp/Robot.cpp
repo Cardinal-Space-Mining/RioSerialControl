@@ -60,20 +60,21 @@ void Robot::DisableAllMotors(){
 void Robot::RobotInit() {
   serial.SetTimeout(units::second_t(.1));
   // serial.Reset();
-  xon[0] = 0x11;
-  xoff[0] = 0x13;
 
   DisableAllMotors();
 
   // runs every 1 millisec
   // this is what is actually reading input
-  AddPeriodic([&] {
-    if (serial_enable)
+  AddPeriodic([this] {this->SerialPeriodic();}, 1_ms);
+}
+
+void Robot::SerialPeriodic(){
+  if (serial_enable)
     {
-      if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x11) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
+      if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == XON) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
       {
         
-        serial.Write(xon, 1); // response to being on
+        serial.Write(&XON, 1); // response to being on
         if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
         {
           int * function_number = (int *)input_buffer;
@@ -87,11 +88,10 @@ void Robot::RobotInit() {
               motors[*motor_number].Set(*outputValue); // controlling motors
               break;
           }
-          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+          serial.Write(&XOFF, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
         }
       }
     }
-  }, 1_ms);
 }
 
 /**
