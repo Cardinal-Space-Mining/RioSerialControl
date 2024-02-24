@@ -9,10 +9,11 @@
 #include <frc/TimedRobot.h>
 #include <frc/smartdashboard/SendableChooser.h>
 #include <frc/SerialPort.h>
-#include <ctre/phoenix/motorcontrol/can/WPI_TalonFX.h>
+#include "ctre/phoenix6/TalonFX.hpp"
+
+using namespace ctre::phoenix6;
 
 #define BUF_SIZE 13
-#define MOTOR_COUNT 1
 
 class Robot : public frc::TimedRobot {
  public:
@@ -30,6 +31,8 @@ class Robot : public frc::TimedRobot {
   void SimulationInit() override;
   void SimulationPeriodic() override;
 
+  void DisableAllMotors();
+
  private:
   frc::SerialPort serial = frc::SerialPort(230400);
   char * input_buffer = (char *)malloc(sizeof(char) * BUF_SIZE);
@@ -39,5 +42,5 @@ class Robot : public frc::TimedRobot {
   char * time_buffer = (char *)malloc(sizeof(char) * 13);
   bool serial_enable = false;
 
-  ctre::phoenix::motorcontrol::can::TalonFX motors[MOTOR_COUNT] = {ctre::phoenix::motorcontrol::can::TalonFX(1)};
+  std::vector<hardware::TalonFX> motors;
 };
