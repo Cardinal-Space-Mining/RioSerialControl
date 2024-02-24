@@ -41,7 +41,6 @@ protected:
 
  private:
   frc::SerialPort serial = frc::SerialPort(230400);
-  char input_buffer[BUF_SIZE];
   bool serial_enable = false;
-  std::vector<hardware::TalonFX> motors;
+  std::array<hardware::TalonFX,1> motors = {{hardware::TalonFX(1, "")}};
 };
