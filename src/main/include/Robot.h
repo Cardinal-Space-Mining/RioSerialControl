@@ -40,7 +40,7 @@ protected:
   void SerialPeriodic();
 
  private:
-  frc::SerialPort serial = frc::SerialPort(230400);
+  frc::SerialPort serial = frc::SerialPort(230400,frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One );
   bool serial_enable = false;
   std::array<hardware::TalonFX,1> motors = {{hardware::TalonFX(1, "")}};
 };
