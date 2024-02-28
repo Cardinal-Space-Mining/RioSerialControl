@@ -11,6 +11,8 @@
 #include <sys/time.h>
 #include <ctime>
 
+#include <ctre/phoenix6/signals/SpnEnums.hpp>
+
 using std::cout;
 using std::endl;
 using std::chrono::duration_cast;
@@ -119,7 +121,7 @@ void Robot::SerialPeriodic()
       serial_read_bytes(serial, (char *)&mds, sizeof(MotorDataStruct)); // could be different based on opcode
       switch (mds.mode)
       {
-      case 0: //Percent Output
+      case 0: // Percent Output
         motors[mds.motor_number].Set(mds.outputValue);
         break;
 
@@ -127,10 +129,19 @@ void Robot::SerialPeriodic()
         motors[mds.motor_number].Disable();
         break;
 
-     default:
+      case 16:
+        if (mds.outputValue == 0)
+        {
+          motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Coast);
+        }else {
+          motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Brake);
+        }
+        break;
+
+      default:
         break;
       }
-                          // controlling motors
+      // controlling motors
       break;
     }
     }
