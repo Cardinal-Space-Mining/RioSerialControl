@@ -12,6 +12,7 @@
 #include <ctime>
 
 #include <ctre/phoenix6/signals/SpnEnums.hpp>
+#include <ctre/phoenix6/controls/VelocityDutyCycle.hpp>
 
 using std::cout;
 using std::endl;
@@ -125,11 +126,16 @@ void Robot::SerialPeriodic()
         motors[mds.motor_number].Set(mds.outputValue);
         break;
 
+      case 2: //Velocity Output. See https://github.com/CrossTheRoadElec/Phoenix6-Examples/blob/main/cpp/VelocityClosedLoop/src/main/cpp/Robot.cpp
+        {
+
+          break;
+        }
       case 15: // Disable Motor Mode
         motors[mds.motor_number].Disable();
         break;
 
-      case 16:
+      case 16: //Set Neutral Mode
         if (mds.outputValue == 0)
         {
           motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Coast);
