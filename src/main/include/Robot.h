@@ -11,12 +11,16 @@
 #include <frc/SerialPort.h>
 #include "ctre/phoenix6/TalonFX.hpp"
 
+#include "../../../PiSerialControl/include/SerialInterface.h"
+
 using namespace ctre::phoenix6;
 
 #define BUF_SIZE 16
 
 constexpr const char XON = 0x11;
 constexpr const char XOFF = 0x13;
+
+constexpr const char* RIO_CAN_BUS = "rio";
 
 class Robot : public frc::TimedRobot {
  public:
@@ -38,8 +42,11 @@ protected:
 
   void SerialPeriodic();
 
+  void handle_motor_data_struct(const struct MotorDataStruct& mds);
+
+
  private:
   frc::SerialPort serial = frc::SerialPort(230400,frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One );
   bool serial_enable = false;
-  std::array<hardware::TalonFX,1> motors = {{hardware::TalonFX(1, "")}};
+  std::array<hardware::TalonFX,1> motors = {{hardware::TalonFX(1, RIO_CAN_BUS)}};
 };

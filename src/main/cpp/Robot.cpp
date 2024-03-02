@@ -11,8 +11,6 @@
 #include <sys/time.h>
 #include <ctime>
 
-#include "../../../PiSerialControl/include/SerialInterface.h"
-
 #include <ctre/phoenix6/signals/SpnEnums.hpp>
 #include <ctre/phoenix6/controls/VelocityDutyCycle.hpp>
 
@@ -123,69 +121,92 @@ void serial_read_bytes(frc::SerialPort &serial, char *buffer, signed long long b
   } while (buff_size != 0);
 }
 
+void Robot::handle_motor_data_struct(const struct MotorDataStruct &mds)
+{
+  switch (mds.call_mode)
+  {
+  case MotorCallMode::PERCENT: // Percent Output
+    motors[mds.motor_number].Set(mds.percent);
+    break;
+
+  case MotorCallMode::VELOCITY: // Velocity Output. See https://github.com/CrossTheRoadElec/Phoenix6-Examples/blob/main/cpp/VelocityClosedLoop/src/main/cpp/Robot.cpp
+  {
+    ctre::phoenix6::controls::VelocityVoltage m_voltageVelocity{0_tps, 0_tr_per_s_sq, true, 0_V, 0, false};
+    motors[mds.motor_number].SetControl(m_voltageVelocity.WithVelocity(static_cast<units::angular_velocity::turns_per_second_t>(mds.velocity_turns_per_second)));
+    break;
+  }
+  case MotorCallMode::DISABLE: // Disable Motor Mode
+    motors[mds.motor_number].Disable();
+    break;
+
+  case MotorCallMode::NEUTRAL_MODE: // Set Neutral Mode
+    switch (mds.neutral_mode)
+    {
+    case MotorNeutralMode::MOTOR_COAST:
+      motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Coast);
+      break;
+
+    default:
+      motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Brake);
+      break;
+    }
+  }
+}
 
 // Format:
-// | XON | 4 byte signed opcode | N bytes of opcode specific data
+// Recv XON
+// Send XON
+// Recv SerialMsg
+// Send XOFF
+// This reads 1 XON byte and one SerialMsg for a total of ~21 bytes, which is defined in MESSAGE_SIZE
 void Robot::SerialPeriodic()
 {
+  constexpr const size_t MESSAGE_SIZE = sizeof(SerialMsg) + sizeof(char);
+
   if (!serial_enable)
   {
     return;
   }
 
+  if (serial.GetBytesReceived() < MESSAGE_SIZE)
+  {
+    return; //Not enough bytes to read
+  }
+  
+
   char start_byte = 0;
 
-  if (serial.Read(&start_byte, 1) == 1 && start_byte == XON) // reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
+  // Read one byte at a time until we hit XON or run out of data
+  while (true)
   {
-
-    int32_t function_number = 0;
-    serial.Write(&XON, 1);                                  // response to being on
-    serial_read_bytes(serial, (char *)&function_number, 4); // Read function number
-
-    switch (function_number) // choose what to do based on opcode
+    if (serial.Read(&start_byte, 1) != 1)
     {
-    case 0:
+      return; // No data
+    }
+    if (start_byte == XON)
     {
-      struct MotorDataStruct mds = {};
-      serial_read_bytes(serial, (char *)&mds, sizeof(MotorDataStruct)); // could be different based on opcode
-      switch (mds.call_mode)
-      {
-      case MotorCallMode::PERCENT: // Percent Output
-        motors[mds.motor_number].Set(mds.percent);
-        break;
-
-      case MotorCallMode::VELOCITY: // Velocity Output. See https://github.com/CrossTheRoadElec/Phoenix6-Examples/blob/main/cpp/VelocityClosedLoop/src/main/cpp/Robot.cpp
-      {
-        ctre::phoenix6::controls::VelocityVoltage m_voltageVelocity{0_tps, 0_tr_per_s_sq, true, 0_V, 0, false};
-        motors[mds.motor_number].SetControl(m_voltageVelocity.WithVelocity(static_cast<units::angular_velocity::turns_per_second_t>(mds.velocity_turns_per_second)));
-        break;
-      }
-      case MotorCallMode::DISABLE: // Disable Motor Mode
-        motors[mds.motor_number].Disable();
-        break;
-
-      case MotorCallMode::NEUTRAL_MODE: // Set Neutral Mode
-        switch (mds.neutral_mode)
-        {
-        case MotorNeutralMode::MOTOR_COAST:
-          motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Coast);
-          break;
-        
-        default:
-          motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Brake);
-          break;
-        }
-        break;
-
-      default:
-        break;
-      }
-      // controlling motors
       break;
     }
-    }
-    serial.Write(&XOFF, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
   }
+
+  serial.Write(&XON, 1); // response to being on
+
+  //Read in Serial Message
+  struct SerialMsg msg = {};
+  serial_read_bytes(serial, (char *)&msg, sizeof(SerialMsg));
+
+  // Handle Message
+  switch (msg.type)
+  {
+  case SerialMsgType::MotorMessage:
+    handle_motor_data_struct(msg.mds);
+    break;
+
+  default:
+    break;
+  }
+
+  serial.Write(&XOFF, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
 }
 
 /**
