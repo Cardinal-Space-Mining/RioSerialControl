@@ -20,7 +20,6 @@ constexpr const char XOFF = 0x13;
 
 class Robot : public frc::TimedRobot {
  public:
-  char* itoa(int i, char b[]);
   void RobotInit() override;
   void RobotPeriodic() override;
   void AutonomousInit() override;

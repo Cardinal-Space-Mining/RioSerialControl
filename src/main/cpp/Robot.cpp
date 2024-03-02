@@ -11,6 +11,8 @@
 #include <sys/time.h>
 #include <ctime>
 
+#include "../../../PiSerialControl/include/SerialInterface.h"
+
 #include <ctre/phoenix6/signals/SpnEnums.hpp>
 #include <ctre/phoenix6/controls/VelocityDutyCycle.hpp>
 
@@ -21,34 +23,67 @@ using std::chrono::milliseconds;
 using std::chrono::seconds;
 using std::chrono::system_clock;
 
-/**
- * Convert int to character, google itoa
- * @param i
- * @param b
- * @return
- */
-char *Robot::itoa(int i, char b[])
+namespace
 {
-  char const digit[] = "0123456789";
-  char *p = b;
-  if (i < 0)
+  configs::TalonFXConfiguration get_default_motor_cfg()
   {
-    *p++ = '-';
-    i *= -1;
+    configs::TalonFXConfiguration configs{};
+
+    /* Voltage-based velocity requires a feed forward to account for the back-emf of the motor */
+    configs.Slot0.kP = 0.11;   // An error of 1 rotation per second results in 2V output
+    configs.Slot0.kI = 0.5;    // An error of 1 rotation per second increases output by 0.5V every second
+    configs.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
+    configs.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
+
+    configs.Voltage.PeakForwardVoltage = 8;  // Peak output of 8 volts
+    configs.Voltage.PeakReverseVoltage = -8; // Peak output of 8 volts
+
+    /* Torque-based velocity does not require a feed forward, as torque will accelerate the rotor up to the desired velocity by itself */
+    configs.Slot1.kP = 5;     // An error of 1 rotation per second results in 5 amps output
+    configs.Slot1.kI = 0.1;   // An error of 1 rotation per second increases output by 0.1 amps every second
+    configs.Slot1.kD = 0.001; // A change of 1000 rotation per second squared results in 1 amp output
+
+    configs.TorqueCurrent.PeakForwardTorqueCurrent = 40;  // Peak output of 40 amps
+    configs.TorqueCurrent.PeakReverseTorqueCurrent = -40; // Peak output of 40 amps
+
+    /* Percent supply gains when we get a Slot 2 */
+    configs.Slot1.kP = 0.01;    // An error of 100 rotations per second results in 100% output
+    configs.Slot1.kI = 0.04;    // An error of 1 rotation per second increases output by 0.04V every second
+    configs.Slot1.kD = 0.00001; // A change of 1 rotation per second squared results in 0.00001 volts output
+    configs.Slot1.kV = 0.013;   // Approximately 1.3% for each rotation per second
+
+    configs.MotorOutput.PeakForwardDutyCycle = 0.7;  // Peak output of 70%
+    configs.MotorOutput.PeakReverseDutyCycle = -0.7; // Peak output of 70%
+
+    return configs;
   }
-  int shifter = i;
-  do
-  { // Move to where representation ends
-    ++p;
-    shifter = shifter / 10;
-  } while (shifter);
-  *p = '\0';
-  do
-  { // Move back, inserting digits as u go
-    *--p = digit[i % 10];
-    i = i / 10;
-  } while (i);
-  return b;
+
+  /**
+   * Convert int to c string, google itoa
+   */
+  void itoa(int i, char b[])
+  {
+    char const digit[] = "0123456789";
+    char *p = b;
+    if (i < 0)
+    {
+      *p++ = '-';
+      i *= -1;
+    }
+    int shifter = i;
+    do
+    { // Move to where representation ends
+      ++p;
+      shifter = shifter / 10;
+    } while (shifter);
+    *p = '\0';
+    do
+    { // Move back, inserting digits as u go
+      *--p = digit[i % 10];
+      i = i / 10;
+    } while (i);
+  }
+
 }
 
 void Robot::DisableAllMotors()
@@ -88,13 +123,6 @@ void serial_read_bytes(frc::SerialPort &serial, char *buffer, signed long long b
   } while (buff_size != 0);
 }
 
-#pragma pack(1)
-struct MotorDataStruct
-{
-  int32_t motor_number;
-  int32_t mode;
-  double outputValue;
-};
 
 // Format:
 // | XON | 4 byte signed opcode | N bytes of opcode specific data
@@ -120,27 +148,32 @@ void Robot::SerialPeriodic()
     {
       struct MotorDataStruct mds = {};
       serial_read_bytes(serial, (char *)&mds, sizeof(MotorDataStruct)); // could be different based on opcode
-      switch (mds.mode)
+      switch (mds.call_mode)
       {
-      case 0: // Percent Output
-        motors[mds.motor_number].Set(mds.outputValue);
+      case MotorCallMode::PERCENT: // Percent Output
+        motors[mds.motor_number].Set(mds.percent);
         break;
 
-      case 2: //Velocity Output. See https://github.com/CrossTheRoadElec/Phoenix6-Examples/blob/main/cpp/VelocityClosedLoop/src/main/cpp/Robot.cpp
-        {
-
-          break;
-        }
-      case 15: // Disable Motor Mode
+      case MotorCallMode::VELOCITY: // Velocity Output. See https://github.com/CrossTheRoadElec/Phoenix6-Examples/blob/main/cpp/VelocityClosedLoop/src/main/cpp/Robot.cpp
+      {
+        ctre::phoenix6::controls::VelocityVoltage m_voltageVelocity{0_tps, 0_tr_per_s_sq, true, 0_V, 0, false};
+        motors[mds.motor_number].SetControl(m_voltageVelocity.WithVelocity(static_cast<units::angular_velocity::turns_per_second_t>(mds.velocity_turns_per_second)));
+        break;
+      }
+      case MotorCallMode::DISABLE: // Disable Motor Mode
         motors[mds.motor_number].Disable();
         break;
 
-      case 16: //Set Neutral Mode
-        if (mds.outputValue == 0)
+      case MotorCallMode::NEUTRAL_MODE: // Set Neutral Mode
+        switch (mds.neutral_mode)
         {
+        case MotorNeutralMode::MOTOR_COAST:
           motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Coast);
-        }else {
+          break;
+        
+        default:
           motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Brake);
+          break;
         }
         break;
 
