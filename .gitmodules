@@ -1,0 +1,3 @@
+[submodule "PiSerialControl"]
+	path = PiSerialControl
+	url = https://github.com/Cardinal-Space-Mining/PiSerialControl.git
