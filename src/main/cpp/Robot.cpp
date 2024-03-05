@@ -8,7 +8,7 @@
 #include <frc/smartdashboard/SmartDashboard.h>
 #include <chrono>
 #include <iostream>
-#include <sys/time.h>
+// #include <sys/time.h>
 #include <ctime>
 
 #include <ctre/phoenix6/signals/SpnEnums.hpp>
@@ -99,6 +99,11 @@ void Robot::DisableAllMotors()
  */
 void Robot::RobotInit()
 {
+  // add sendables to sender, register update callback
+  // this->nt_sender.putData(&this->pigeon_imu, "pigeon"); // need to test with actual device -- in sim this didn't add anything useful to NT
+  this->nt_sender.putData(this, "robot");
+  this->AddPeriodic( [this]{ this->nt_sender.updateValues(); }, 20_ms );
+
   serial.SetTimeout(units::second_t(.1));
   // serial.Reset();
 
@@ -266,6 +271,16 @@ void Robot::SimulationPeriodic() {}
 /**
  * end of nothing block
  */
+
+void Robot::InitSendable(wpi::SendableBuilder& builder) {
+  builder.AddDoubleArrayProperty("pigeon rotation quat", [this]{
+    frc::Rotation3d r = this->pigeon_imu.GetRotation3d();
+    static std::vector<double> _data;
+    _data.resize(4);
+    memcpy(_data.data(), &r.GetQuaternion(), sizeof(frc::Quaternion));
+    return _data;
+  }, nullptr);
+}
 
 #ifndef RUNNING_FRC_TESTS
 int main()

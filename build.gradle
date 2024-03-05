@@ -36,7 +36,7 @@ deploy {
 def deployArtifact = deploy.targets.roborio.artifacts.frcCpp
 
 // Set this to true to enable desktop support.
-def includeDesktopSupport = false
+def includeDesktopSupport = true
 
 // Set to true to run simulation in debug mode
 wpi.cpp.debugSimulation = false
@@ -47,6 +47,11 @@ wpi.sim.addGui().defaultEnabled = true
 wpi.sim.addDriverstation()
 
 model {
+    // toolChains {
+    //     visualCpp(VisualCpp) {
+    //         installDir 'D:/Applications/Visual Studio 2022'
+    //     }
+    // }
     components {
         frcUserProgram(NativeExecutableSpec) {
             targetPlatform wpi.platforms.roborio

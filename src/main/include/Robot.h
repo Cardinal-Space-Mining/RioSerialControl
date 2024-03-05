@@ -5,13 +5,20 @@
 #pragma once
 
 #include <string>
+#include <array>
 
+#include <wpi/sendable/Sendable.h>
+#include <wpi/sendable/SendableBuilder.h>
 #include <frc/TimedRobot.h>
 #include <frc/smartdashboard/SendableChooser.h>
 #include <frc/SerialPort.h>
-#include "ctre/phoenix6/TalonFX.hpp"
 
+#include <ctre/phoenix6/TalonFX.hpp>
+#include <ctre/phoenix6/Pigeon2.hpp>
+
+#include "SenderNT.h"
 #include "../../../PiSerialControl/include/SerialInterface.h"
+
 
 using namespace ctre::phoenix6;
 
@@ -22,8 +29,15 @@ constexpr const char XOFF = 0x13;
 
 constexpr const char* RIO_CAN_BUS = "rio";
 
-class Robot : public frc::TimedRobot {
- public:
+constexpr int PIGEON_CAN_ID = 0;  // << Value!!!
+// motor ids...
+
+
+class Robot : public frc::TimedRobot, wpi::Sendable {
+public:
+  Robot() = default;
+  ~Robot() = default;
+
   void RobotInit() override;
   void RobotPeriodic() override;
   void AutonomousInit() override;
@@ -37,6 +51,8 @@ class Robot : public frc::TimedRobot {
   void SimulationInit() override;
   void SimulationPeriodic() override;
 
+  void InitSendable(wpi::SendableBuilder&) override; // use for logging motor data
+
 protected:
   void DisableAllMotors();
 
@@ -45,8 +61,13 @@ protected:
   void handle_motor_data_struct(const struct MotorDataStruct& mds);
 
 
- private:
-  frc::SerialPort serial = frc::SerialPort(230400,frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One );
+private:
+  frc::SerialPort serial = frc::SerialPort( 230400, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One );
   bool serial_enable = false;
-  std::array<hardware::TalonFX,1> motors = {{hardware::TalonFX(1, RIO_CAN_BUS)}};
+  std::array<hardware::TalonFX, 1> motors = { { hardware::TalonFX(1, RIO_CAN_BUS) } };  // << motor id constants!!!
+  hardware::Pigeon2 pigeon_imu{ PIGEON_CAN_ID, RIO_CAN_BUS };
+
+  SenderNT nt_sender{ "rio telemetry" };
+
+
 };
