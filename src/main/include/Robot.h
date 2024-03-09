@@ -58,7 +58,7 @@ protected:
 
   void SerialPeriodic();
 
-  void handle_motor_data_struct(const struct MotorDataStruct& mds);
+  SerialResponse handle_motor_data_struct(const struct MotorDataStruct& mds);
 
 
 private:

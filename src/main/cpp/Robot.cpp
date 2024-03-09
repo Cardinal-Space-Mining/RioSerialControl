@@ -102,7 +102,9 @@ void Robot::RobotInit()
   // add sendables to sender, register update callback
   // this->nt_sender.putData(&this->pigeon_imu, "pigeon"); // need to test with actual device -- in sim this didn't add anything useful to NT
   this->nt_sender.putData(this, "robot");
-  this->AddPeriodic( [this]{ this->nt_sender.updateValues(); }, 20_ms );
+  this->AddPeriodic([this]
+                    { this->nt_sender.updateValues(); },
+                    20_ms);
 
   serial.SetTimeout(units::second_t(.1));
   // serial.Reset();
@@ -116,24 +118,35 @@ void Robot::RobotInit()
               1_ms);
 }
 
-void serial_read_bytes(frc::SerialPort &serial, char *buffer, signed long long buff_size)
+void serial_write_bytes(frc::SerialPort &serial, const char *buffer, size_t buff_size)
 {
   do
   {
-    auto num_bytes_read = serial.Read(buffer, buff_size);
-    buffer = buffer + num_bytes_read;
-    buff_size = buff_size - num_bytes_read;
+    int num_bytes_written = serial.Write(buffer, buff_size);
+    buffer = (char *)((size_t)buffer + (size_t)num_bytes_written);
+    buff_size -= num_bytes_written;
   } while (buff_size != 0);
 }
 
-void Robot::handle_motor_data_struct(const struct MotorDataStruct &mds)
+void serial_read_bytes(frc::SerialPort &serial, char *buffer, size_t buff_size)
+{
+  do
+  {
+    int num_bytes_read = serial.Read(buffer, buff_size);
+    buffer = (char *)((size_t)buffer + (size_t)num_bytes_read);
+    buff_size -= num_bytes_read;
+  } while (buff_size != 0);
+}
+
+SerialResponse Robot::handle_motor_data_struct(const struct MotorDataStruct &mds)
 {
   switch (mds.call_mode)
   {
   case MotorCallMode::PERCENT: // Percent Output
+  {
     motors[mds.motor_number].Set(mds.percent);
     break;
-
+  }
   case MotorCallMode::VELOCITY: // Velocity Output. See https://github.com/CrossTheRoadElec/Phoenix6-Examples/blob/main/cpp/VelocityClosedLoop/src/main/cpp/Robot.cpp
   {
     ctre::phoenix6::controls::VelocityVoltage m_voltageVelocity{0_tps, 0_tr_per_s_sq, true, 0_V, 0, false};
@@ -141,9 +154,10 @@ void Robot::handle_motor_data_struct(const struct MotorDataStruct &mds)
     break;
   }
   case MotorCallMode::DISABLE: // Disable Motor Mode
+  {
     motors[mds.motor_number].Disable();
     break;
-
+  }
   case MotorCallMode::NEUTRAL_MODE: // Set Neutral Mode
     switch (mds.neutral_mode)
     {
@@ -151,11 +165,16 @@ void Robot::handle_motor_data_struct(const struct MotorDataStruct &mds)
       motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Coast);
       break;
 
-    default:
+    case MotorNeutralMode::MOTOR_BREAK:
       motors[mds.motor_number].SetNeutralMode(ctre::phoenix6::signals::NeutralModeValue::Brake);
       break;
+    default:
+      return SerialResponse::INVALID_ARGUMENT;
     }
+  default:
+    return SerialResponse::INVALID_ARGUMENT;
   }
+  return SerialResponse::SUCCESS;
 }
 
 // Format:
@@ -173,45 +192,45 @@ void Robot::SerialPeriodic()
     return;
   }
 
-  if (serial.GetBytesReceived() < MESSAGE_SIZE)
-  {
-    return; //Not enough bytes to read
-  }
-  
-
-  char start_byte = 0;
-
   // Read one byte at a time until we hit XON or run out of data
-  while (true)
+  char start_byte = 0;
+  do
   {
-    if (serial.Read(&start_byte, 1) != 1)
-    {
-      return; // No data
-    }
-    if (start_byte == XON)
-    {
-      break;
-    }
-  }
+    serial_read_bytes(this->serial, &start_byte, sizeof(char));
+  } while (start_byte != XON);
 
-  serial.Write(&XON, 1); // response to being on
+  serial_write_bytes(serial, &XON, sizeof(XON)); // response to being on
 
-  //Read in Serial Message
+  // Read in Serial Message
   struct SerialMsg msg = {};
   serial_read_bytes(serial, (char *)&msg, sizeof(SerialMsg));
 
   // Handle Message
-  switch (msg.type)
+  SerialResponse resp;
+  try
   {
-  case SerialMsgType::MotorMessage:
-    handle_motor_data_struct(msg.mds);
-    break;
+    switch (msg.type)
+    {
+    case SerialMsgType::MotorMessage:
+      resp = handle_motor_data_struct(msg.mds);
+      break;
 
-  default:
-    break;
+    default:
+      resp = SerialResponse::INVALID_ARGUMENT;
+    }
   }
-
-  serial.Write(&XOFF, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+  catch (const std::exception &e)
+  {
+    std::cerr << "Serial Comm Exception!" << e.what() << '\n';
+    resp = SerialResponse::GENERAL_FAILURE;
+  }
+  catch (...)
+  {
+    std::cerr << "Serial Comm Error!" << '\n';
+    resp = SerialResponse::GENERAL_FAILURE;
+  }
+  serial_write_bytes(serial, (char *)&resp, sizeof(resp)); // Send error code
+  serial_write_bytes(serial, &XOFF, sizeof(XOFF));         // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
 }
 
 /**
@@ -272,14 +291,17 @@ void Robot::SimulationPeriodic() {}
  * end of nothing block
  */
 
-void Robot::InitSendable(wpi::SendableBuilder& builder) {
-  builder.AddDoubleArrayProperty("pigeon rotation quat", [this]{
+void Robot::InitSendable(wpi::SendableBuilder &builder)
+{
+  builder.AddDoubleArrayProperty(
+      "pigeon rotation quat", [this]
+      {
     frc::Rotation3d r = this->pigeon_imu.GetRotation3d();
     static std::vector<double> _data;
     _data.resize(4);
     memcpy(_data.data(), &r.GetQuaternion(), sizeof(frc::Quaternion));
-    return _data;
-  }, nullptr);
+    return _data; },
+      nullptr);
 }
 
 #ifndef RUNNING_FRC_TESTS
