@@ -6,34 +6,36 @@
 
 #include <string>
 #include <array>
+#include <list>
 
 #include <wpi/sendable/Sendable.h>
 #include <wpi/sendable/SendableBuilder.h>
 #include <frc/TimedRobot.h>
 #include <frc/smartdashboard/SendableChooser.h>
 #include <frc/SerialPort.h>
+#include "frc/Joystick.h"
+#include "frc/XboxController.h"
 
 #include <ctre/phoenix6/TalonFX.hpp>
 #include <ctre/phoenix6/Pigeon2.hpp>
 
-#include "SenderNT.h"
-#include "../../../PiSerialControl/include/SerialInterface.h"
+#include "ctre/Phoenix.h"
 
+#include "SenderNT.h"
+
+// #include "SerialMgr.h"
 
 using namespace ctre::phoenix6;
 
-#define BUF_SIZE 16
+typedef ctre::phoenix6::hardware::TalonFX TalonFX6;
+typedef WPI_TalonFX TalonFX5;
 
-constexpr const char XON = 0x11;
-constexpr const char XOFF = 0x13;
-
-constexpr const char* RIO_CAN_BUS = "rio";
-
-constexpr int PIGEON_CAN_ID = 0;  // << Value!!!
+constexpr int PIGEON_CAN_ID = 0; // << Value!!!
 // motor ids...
 
+class Robot : public frc::TimedRobot, wpi::Sendable
+{
 
-class Robot : public frc::TimedRobot, wpi::Sendable {
 public:
   Robot() = default;
   ~Robot() = default;
@@ -50,24 +52,34 @@ public:
   void TestPeriodic() override;
   void SimulationInit() override;
   void SimulationPeriodic() override;
-
-  void InitSendable(wpi::SendableBuilder&) override; // use for logging motor data
-
-protected:
   void DisableAllMotors();
+  void DriveTrainControl();
+  void HopperControl();
+  void TrencherControl();
+  void ConfigTracks();
+  void ConfigTrencher();
+  void ConfigHopper();
 
-  void SerialPeriodic();
+  static void defaultVelocityCfg(TalonFX6& mtr);
 
-  SerialResponse handle_motor_data_struct(const struct MotorDataStruct& mds);
-
+  void InitSendable(wpi::SendableBuilder &) override; // use for logging motor data
 
 private:
-  frc::SerialPort serial = frc::SerialPort( 230400, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One );
-  bool serial_enable = false;
-  std::array<hardware::TalonFX, 1> motors = { { hardware::TalonFX(1, RIO_CAN_BUS) } };  // << motor id constants!!!
-  hardware::Pigeon2 pigeon_imu{ PIGEON_CAN_ID, RIO_CAN_BUS };
+  SenderNT nt_sender{"rio telemetry"};
 
-  SenderNT nt_sender{ "rio telemetry" };
+  // Motors. Note, Talon FX's Can only use the Pheonix 5 API, hence the F6 and F5 classes
+  TalonFX6 track_right = 0;
+  TalonFX6 track_left = 1;
+  TalonFX6 trencher = 2;
+  TalonFX6 hopper_belt = 3;
+  TalonFX5 hopper_actuator = 4;
 
+  // Joystick
+  frc::Joystick logitech{0};
 
+  double drive_power_scale_factor = .7;
+
+  static constexpr auto TRENCHER_MAX_VELO = 50_tps;
+  static constexpr auto HOPPER_BELT_MAX_VELO = 60_tps;
+  static constexpr auto TRACKS_MAX_VELO = 125_tps;
 };
