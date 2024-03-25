@@ -57,8 +57,7 @@ public:
   void HopperControl();
   void TrencherControl();
   void ConfigTracks();
-  void ConfigTrencher();
-  void ConfigHopper();
+
 
   static void defaultVelocityCfg(TalonFX6& mtr);
 

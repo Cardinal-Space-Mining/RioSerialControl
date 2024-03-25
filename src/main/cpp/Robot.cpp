@@ -31,7 +31,6 @@ void Robot::DisableAllMotors()
   hopper_actuator.Set(0);
 }
 
-
 void Robot::defaultVelocityCfg(TalonFX6 &motor)
 {
   configs::TalonFXConfiguration configs{};
@@ -43,6 +42,23 @@ void Robot::defaultVelocityCfg(TalonFX6 &motor)
   configs.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
 
   motor.GetConfigurator().Apply(configs);
+}
+
+void Robot::ConfigTracks()
+{
+  configs::TalonFXConfiguration configs{};
+
+  /* Voltage-based velocity requires a feed forward to account for the back-emf of the motor */
+  configs.Slot0.kP = 0.11;   // An error of 1 rotation per second results in 2V output
+  configs.Slot0.kI = 0.5;    // An error of 1 rotation per second increases output by 0.5V every second
+  configs.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
+  configs.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
+
+  configs.CurrentLimits.StatorCurrentLimitEnable = true;
+  configs.CurrentLimits.StatorCurrentLimit = 40; // Set max current in stator to 40A
+
+  track_left.GetConfigurator().Apply(configs);
+  track_right.GetConfigurator().Apply(configs);
 }
 
 /**
@@ -68,8 +84,7 @@ void Robot::RobotInit()
 
   Robot::defaultVelocityCfg(trencher);
   Robot::defaultVelocityCfg(hopper_belt);
-  Robot::defaultVelocityCfg(track_left);
-  Robot::defaultVelocityCfg(track_right);
+  ConfigTracks();
   track_right.SetInverted(true);
 }
 
@@ -168,7 +183,6 @@ void Robot::DriveTrainControl()
 
   track_right.SetControl(m_voltageVelocity.WithVelocity(r_velo));
   track_left.SetControl(m_voltageVelocity.WithVelocity(l_velo));
-
 }
 
 /**
