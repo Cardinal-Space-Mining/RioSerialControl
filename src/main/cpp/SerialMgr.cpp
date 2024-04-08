@@ -1,6 +1,10 @@
 #include "SerialMgr.h"
 
+#include <iostream>
 #include <stdexcept>
+
+using std::cout;
+using std::endl;
 
 namespace
 {
@@ -39,22 +43,26 @@ namespace
 
   void serial_write_bytes(frc::SerialPort &serial, const char *buffer, size_t buff_size)
   {
+    cout << "serial write" << endl;
     do
     {
       int num_bytes_written = serial.Write(buffer, buff_size);
       buffer = (char *)((size_t)buffer + (size_t)num_bytes_written);
       buff_size -= num_bytes_written;
     } while (buff_size != 0);
+    cout << "end of write" << endl;
   }
 
   void serial_read_bytes(frc::SerialPort &serial, char *buffer, size_t buff_size)
   {
+    cout << "serial read" << endl;
     do
     {
       int num_bytes_read = serial.Read(buffer, buff_size);
       buffer = (char *)((size_t)buffer + (size_t)num_bytes_read);
       buff_size -= num_bytes_read;
     } while (buff_size != 0);
+    cout << "end serial read" << endl;
   }
 
 } // namespace
@@ -66,10 +74,12 @@ SerialMgr::~SerialMgr()
 
 void SerialMgr::init()
 {
+  cout << "serialmgr init" << endl;
   for (auto &it : motors)
   {
     default_cfg(it);
   }
+  cout << "end init" << endl;
 }
 
 SerialResponse SerialMgr::handle_motor_data_struct(const struct MotorDataStruct &mds)
@@ -129,6 +139,8 @@ void SerialMgr::xon_wait_state()
 
   } while (start_byte != XON);
 
+  cout << "we have recieved the xon wait" << endl;
+
   serial_write_bytes(serial, &XON, sizeof(XON)); // response to being on
   change_state(SerialMgr::SerialStates::MSG_WAIT);
 }
@@ -187,7 +199,6 @@ void SerialMgr::msg_wait_state()
 
 void SerialMgr::serial_periodic()
 {
-
   // Don't run if not enabled
   if (!enabled)
   {
@@ -197,10 +208,12 @@ void SerialMgr::serial_periodic()
   switch (state)
   {
   case SerialMgr::SerialStates::XON_WAIT:
+    cout << "XON_WAIT" << endl;
     xon_wait_state();
     break;
 
   case SerialMgr::SerialStates::MSG_WAIT:
+    cout << "MSG_WAIT" << endl;
     msg_wait_state();
     break;
 

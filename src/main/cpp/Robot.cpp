@@ -78,9 +78,9 @@ void Robot::RobotInit()
 
   // runs every 1 millisec
   // this is what is actually reading input
-  // AddPeriodic([this]
-  //             { this->mgr.serial_periodic(); },
-  //             1_ms);
+  AddPeriodic([this]
+              { this->mgr.serial_periodic(); },
+              1_ms);
 
   Robot::defaultVelocityCfg(trencher);
   Robot::defaultVelocityCfg(hopper_belt);
@@ -100,20 +100,22 @@ void Robot::AutonomousInit()
 {
   // serial.Reset();
   DisableAllMotors();
-  // mgr.enable();
+  mgr.enable();
 }
 
 /**
  * does nothing for now
  */
-void Robot::AutonomousPeriodic() {}
+void Robot::AutonomousPeriodic() {
+  mgr.enable();
+}
 
 /**
  * dont listen to serial, manual control of rover
  */
 void Robot::TeleopInit()
 {
-  // mgr.enable();
+  mgr.disable();
 }
 
 static constexpr long double PI = 3.14159265358979323846;

@@ -21,6 +21,7 @@
 
 #include "ctre/Phoenix.h"
 
+#include "SerialMgr.h"
 #include "SenderNT.h"
 
 // #include "SerialMgr.h"
@@ -65,6 +66,16 @@ public:
 
 private:
   SenderNT nt_sender{"rio telemetry"};
+
+  std::array<ctre::phoenix6::hardware::TalonFX, 1> mts = {
+    // TalonFX6(0) // track_right
+    // TalonFX6(1), // track_left
+    TalonFX6(0), // trencher
+    // TalonFX6(3) // hopper_belt
+    // TalonFX5(4)  // hopper_actuator
+  };
+
+  SerialMgr mgr{mts};
 
   // Motors. Note, Talon FX's Can only use the Pheonix 5 API, hence the F6 and F5 classes
   TalonFX6 track_right = 0;

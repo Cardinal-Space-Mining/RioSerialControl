@@ -25,7 +25,7 @@ private:
     SerialStates state;
     std::array<ctre::phoenix6::hardware::TalonFX,1> &motors;
     frc::SerialPort serial = frc::SerialPort(230400, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One);
-    bool enabled = false;
+    bool enabled = true;
     time_t state_timestamp;
 
     static constexpr double timeout_s = 0.1;
