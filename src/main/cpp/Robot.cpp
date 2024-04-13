@@ -22,8 +22,7 @@ using std::chrono::milliseconds;
 using std::chrono::seconds;
 using std::chrono::system_clock;
 
-void Robot::DisableAllMotors()
-{
+void Robot::DisableAllMotors() {
   track_right.Set(0);
   track_left.Set(0);
   trencher.Set(0);
@@ -31,8 +30,7 @@ void Robot::DisableAllMotors()
   hopper_actuator.Set(0);
 }
 
-void Robot::defaultVelocityCfg(TalonFX6 &motor)
-{
+void Robot::defaultVelocityCfg(TalonFX6 &motor) {
   configs::TalonFXConfiguration configs{};
 
   /* Voltage-based velocity requires a feed forward to account for the back-emf of the motor */
@@ -91,13 +89,14 @@ void Robot::RobotInit()
 /**
  * eventually maybe not do this
  */
-void Robot::RobotPeriodic() {}
+void Robot::RobotPeriodic() {
+
+}
 
 /**
  * Zeroing out all motors and enables serial to listen for opcodes
  */
-void Robot::AutonomousInit()
-{
+void Robot::AutonomousInit() {
   // serial.Reset();
   DisableAllMotors();
   mgr.enable();
@@ -113,15 +112,13 @@ void Robot::AutonomousPeriodic() {
 /**
  * dont listen to serial, manual control of rover
  */
-void Robot::TeleopInit()
-{
+void Robot::TeleopInit() {
   mgr.disable();
 }
 
 static constexpr long double PI = 3.14159265358979323846;
 
-void Robot::TrencherControl()
-{
+void Robot::TrencherControl() {
   double belt_percentage = -logitech.GetRawAxis(LogitechConstants::RIGHT_TRIGGER);
   if (logitech.GetRawButton(LogitechConstants::RB))
   {
@@ -132,8 +129,26 @@ void Robot::TrencherControl()
   trencher.SetControl(trencherVelocity);
 }
 
-void Robot::HopperControl()
-{
+void Robot::AutoTrencherControl() {
+  bool mineForward = true; // true if collecting, false if backwards
+  bool miningMode = true; // true if mining autonomously, false if autonomy is off or driving
+  double belt_percentage = 0.0; // I believe percentage
+  if (miningMode) {
+    belt_percentage = 0.2;
+    if (!mineForward) {
+      belt_percentage *= -1.0;
+    }
+    ctre::phoenix6::controls::VelocityVoltage trencherVelocity{TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
+    trencher.SetControl(trencherVelocity);
+  }
+  else {
+    belt_percentage = 0;
+    ctre::phoenix6::controls::VelocityVoltage trencherVelocity{TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
+    trencher.SetControl(trencherVelocity);
+  }
+}
+
+void Robot::HopperControl() {
   // Control Hopper Belt
   double belt_percentage = -logitech.GetRawAxis(LogitechConstants::LEFT_TRIGGER);
   if (logitech.GetRawButton(LogitechConstants::LB))
@@ -149,8 +164,7 @@ void Robot::HopperControl()
   hopper_actuator.Set(-actuator_power);
 }
 
-void Robot::DriveTrainControl()
-{
+void Robot::DriveTrainControl() {
   using namespace LogitechConstants;
 
   ctre::phoenix6::controls::VelocityVoltage m_voltageVelocity{0_tps, 1_tr_per_s_sq, false, 0_V, 0, false};
@@ -160,23 +174,19 @@ void Robot::DriveTrainControl()
 
   const double theta = std::atan2(stick_x, stick_y);
   double magnitude = std::sqrt(std::pow(stick_x, 2) + std::pow(stick_y, 2));
-  if (magnitude < 0.1)
-  {
+  if (magnitude < 0.1) {
     magnitude = 0;
   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_X))
-  {
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_X)) {
     drive_power_scale_factor = 1;
   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_Y))
-  {
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_Y)) {
     drive_power_scale_factor = 0.7;
   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_B))
-  {
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
     drive_power_scale_factor = 0.3;
   }
 
@@ -190,8 +200,7 @@ void Robot::DriveTrainControl()
 /**
  * nothing, will eventuall put here
  */
-void Robot::TeleopPeriodic()
-{
+void Robot::TeleopPeriodic() {
   this->DriveTrainControl();
   this->HopperControl();
   this->TrencherControl();
@@ -200,8 +209,7 @@ void Robot::TeleopPeriodic()
 /**
  * Turns off all motors when disabled
  */
-void Robot::DisabledInit()
-{
+void Robot::DisabledInit() {
   // mgr.disable();
   DisableAllMotors();
 }
@@ -222,8 +230,7 @@ void Robot::SimulationPeriodic() {}
  * end of nothing block
  */
 
-void Robot::InitSendable(wpi::SendableBuilder &builder)
-{
+void Robot::InitSendable(wpi::SendableBuilder &builder) {
   // builder.AddDoubleArrayProperty(
   //     "pigeon rotation quat", [this]
   //     {
@@ -236,8 +243,7 @@ void Robot::InitSendable(wpi::SendableBuilder &builder)
 }
 
 #ifndef RUNNING_FRC_TESTS
-int main()
-{
+int main() {
   return frc::StartRobot<Robot>();
 }
 #endif

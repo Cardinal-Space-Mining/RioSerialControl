@@ -57,6 +57,9 @@ public:
   void DriveTrainControl();
   void HopperControl();
   void TrencherControl();
+  void AutoDriveTrainControl();
+  void AutoHopperControl();
+  void AutoTrencherControl();
   void ConfigTracks();
 
 
