@@ -12,18 +12,19 @@
 #include <ctime>
 #include <cmath>
 
-#include <iostream>
 #include "LogitechConstants.hpp"
 
-using std::cout;
+using std::cout; 
 using std::endl;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::chrono::seconds;
 using std::chrono::system_clock;
 
-void Robot::DisableAllMotors()
-{
+/**
+ * Disables all motors
+*/
+void Robot::DisableAllMotors() {
   track_right.Set(0);
   track_left.Set(0);
   trencher.Set(0);
@@ -62,30 +63,75 @@ void Robot::ConfigTracks()
 }
 
 /**
+ * Convert int to character, google itoa
+ * @param i
+ * @param b
+ * @return
+ */
+char* Robot::itoa(int i, char b[]){
+    char const digit[] = "0123456789";
+    char* p = b;
+    if(i<0){
+        *p++ = '-';
+        i *= -1;
+    }
+    int shifter = i;
+    do{ //Move to where representation ends
+        ++p;
+        shifter = shifter/10;
+    }while(shifter);
+    *p = '\0';
+    do{ //Move back, inserting digits as u go
+        *--p = digit[i%10];
+        i = i/10;
+    }while(i);
+    return b;
+}
+
+/**
  * Define constants
  * xon & xoff start end commands for RIO
  */
-void Robot::RobotInit()
-{
-  // add sendables to sender, register update callback
-  // this->nt_sender.putData(&this->pigeon_imu, "pigeon"); // need to test with actual device -- in sim this didn't add anything useful to NT
-  this->nt_sender.putData(this, "robot");
-  this->AddPeriodic([this]
-                    { this->nt_sender.updateValues(); },
-                    20_ms);
+void Robot::RobotInit() {
+
+  // serial = frc::SerialPort(9600, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One);
+
+  serial.SetTimeout(units::second_t(.1));
+  // serial.Reset();
+  xon[0] = 0x13;
+  xoff[0] = 0x11;
 
   DisableAllMotors();
 
   // runs every 1 millisec
   // this is what is actually reading input
-  AddPeriodic([this]
-              { this->mgr.serial_periodic(); },
-              1_ms);
+  AddPeriodic([&] {
+    if (serial_enable)
+    {
+      if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x13) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
+      {
+        serial.Write(xon, 1); // response to being on
+        if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
+        {
+          int * function_number = (int *)input_buffer;
+          switch (*function_number) // choosing what to do based on opcode
+          {
+            case 0:
+              serial.Read(input_buffer, 12); // could be different based on opcode
 
-  Robot::defaultVelocityCfg(trencher);
-  Robot::defaultVelocityCfg(hopper_belt);
-  ConfigTracks();
-  track_right.SetInverted(true);
+              int motor_number = *reinterpret_cast<int*>(input_buffer);
+              double output_value = *reinterpret_cast<double*>(input_buffer + 4);
+              motors[motor_number].Set(output_value);
+
+              cout << "motor number: " << motor_number << endl;
+              cout << "speed set to: " << output_value << endl;
+              break;
+          }
+          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+        }
+      }
+    }
+  }, 1_ms);
 }
 
 /**
@@ -96,26 +142,23 @@ void Robot::RobotPeriodic() {}
 /**
  * Zeroing out all motors and enables serial to listen for opcodes
  */
-void Robot::AutonomousInit()
-{
-  // serial.Reset();
+void Robot::AutonomousInit() {
   DisableAllMotors();
-  mgr.enable();
+  serial_enable = true;
 }
 
 /**
  * does nothing for now
  */
 void Robot::AutonomousPeriodic() {
-  mgr.enable();
+  // serial_enable = true;
 }
 
 /**
  * dont listen to serial, manual control of rover
  */
-void Robot::TeleopInit()
-{
-  mgr.disable();
+void Robot::TeleopInit() {
+  serial_enable = false;
 }
 
 static constexpr long double PI = 3.14159265358979323846;
@@ -187,23 +230,19 @@ void Robot::DriveTrainControl()
   track_left.SetControl(m_voltageVelocity.WithVelocity(l_velo));
 }
 
+
 /**
  * nothing, will eventuall put here
  */
-void Robot::TeleopPeriodic()
-{
-  this->DriveTrainControl();
-  this->HopperControl();
-  this->TrencherControl();
-}
+void Robot::TeleopPeriodic() {}
 
 /**
  * Turns off all motors when disabled
  */
-void Robot::DisabledInit()
-{
-  // mgr.disable();
+void Robot::DisabledInit() {
+  
   DisableAllMotors();
+  serial_enable = false;
 }
 
 /**
@@ -222,22 +261,8 @@ void Robot::SimulationPeriodic() {}
  * end of nothing block
  */
 
-void Robot::InitSendable(wpi::SendableBuilder &builder)
-{
-  // builder.AddDoubleArrayProperty(
-  //     "pigeon rotation quat", [this]
-  //     {
-  //   frc::Rotation3d r = this->pigeon_imu.GetRotation3d();
-  //   static std::vector<double> _data;
-  //   _data.resize(4);
-  //   memcpy(_data.data(), &r.GetQuaternion(), sizeof(frc::Quaternion));
-  //   return _data; },
-  //     nullptr);
-}
-
 #ifndef RUNNING_FRC_TESTS
-int main()
-{
+int main() {
   return frc::StartRobot<Robot>();
 }
 #endif
