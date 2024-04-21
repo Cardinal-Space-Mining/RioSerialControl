@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 #include <frc/TimedRobot.h>
@@ -13,6 +14,7 @@
 
 #include <frc/TimedRobot.h>
 #include <frc/smartdashboard/SendableChooser.h>
+#include <frc/AnalogPotentiometer.h>
 #include <frc/SerialPort.h>
 #include "frc/Joystick.h"
 #include "frc/XboxController.h"
@@ -27,7 +29,7 @@ typedef ctre::phoenix6::hardware::TalonFX TalonFX6;
 typedef WPI_TalonFX TalonFX5;
 
 #define BUF_SIZE 13
-#define MOTOR_COUNT 1
+#define MOTOR_COUNT 5
 
 constexpr int PIGEON_CAN_ID = 0; // << Value!!!
 
@@ -47,6 +49,13 @@ class Robot : public frc::TimedRobot {
   void SimulationInit() override;
   void SimulationPeriodic() override;
   void DisableAllMotors();
+
+  uint8_t StartMining();
+  uint8_t StopMining();
+
+  uint8_t StartOffload();
+  uint8_t StopOffload();
+
   void DriveTrainControl();
   void HopperControl();
   void TrencherControl();
@@ -68,11 +77,20 @@ class Robot : public frc::TimedRobot {
   char * time_buffer = (char *)malloc(sizeof(char) * 13);
   bool serial_enable = false;
 
+  bool is_mining = false;
+  bool is_offload = false;
+
   // ctre::phoenix::motorcontrol::can::TalonFX motors[MOTOR_COUNT] = {ctre::phoenix::motorcontrol::can::TalonFX(1)};
   // std::array<ctre::pheonix6::hardware::TalonFX, 1> mts = {
   //   TalonFX6(0),
   // }
-  ctre::phoenix6::hardware::TalonFX motors[MOTOR_COUNT] = {ctre::phoenix6::hardware::TalonFX(0)};
+  ctre::phoenix6::hardware::TalonFX motors[MOTOR_COUNT] = {
+    ctre::phoenix6::hardware::TalonFX(0),
+    ctre::phoenix6::hardware::TalonFX(1),
+    ctre::phoenix6::hardware::TalonFX(2),
+    ctre::phoenix6::hardware::TalonFX(3),
+    ctre::phoenix6::hardware::TalonFX(4),
+  };
 
   // Consts for motors id's
   TalonFX6 track_right = 0;
@@ -81,13 +99,19 @@ class Robot : public frc::TimedRobot {
   TalonFX6 hopper_belt = 3;
   TalonFX5 hopper_actuator = 4;
 
+  // Actuator Potentiometer
+  double pot_max = 100;
+  double pot_default = 40;
+  // frc::AnalogInput hopper_actuator_pot_input {0};
+  frc::AnalogPotentiometer hopper_actuator_pot {0, pot_max, pot_default};
 
   frc::Joystick logitech{0};
 
   double drive_power_scale_factor = .7;
 
   static constexpr auto TRENCHER_MAX_VELO = 50_tps;
-  static constexpr auto HOPPER_BELT_MAX_VELO = 60_tps;
+  // static constexpr auto HOPPER_BELT_MAX_VELO = 60_tps;
+  static constexpr auto HOPPER_BELT_MAX_VELO = 8_tps;
   static constexpr auto TRACKS_MAX_VELO = 125_tps;
-  
+  static constexpr auto HOPPER_ACTUATOR_MAX_VELO = .2;  
 };

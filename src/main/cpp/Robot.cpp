@@ -6,6 +6,9 @@
 
 #include <fmt/core.h>
 #include <frc/smartdashboard/SmartDashboard.h>
+#include <frc/AnalogPotentiometer.h>
+#include <frc/AnalogInput.h>
+
 #include <chrono>
 #include <iostream>
 // #include <sys/time.h>
@@ -94,7 +97,9 @@ char* Robot::itoa(int i, char b[]){
  */
 void Robot::RobotInit() {
 
-  // serial = frc::SerialPort(9600, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One);
+  trencher.SetInverted(true);
+  hopper_belt.SetInverted(true);
+  track_right.SetInverted(true);
 
   serial.SetTimeout(units::second_t(.1));
   // serial.Reset();
@@ -113,10 +118,13 @@ void Robot::RobotInit() {
         serial.Write(xon, 1); // response to being on
         if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
         {
-          int * function_number = (int *)input_buffer;
-          switch (*function_number) // choosing what to do based on opcode
+          int function_number = *reinterpret_cast<int*>(input_buffer);
+          uint8_t result;
+          cout << function_number << endl;
+          switch (function_number) // choosing what to do based on opcode
           {
-            case 0:
+            case 0: //spinning up motor with params id and output
+            {
               serial.Read(input_buffer, 12); // could be different based on opcode
 
               int motor_number = *reinterpret_cast<int*>(input_buffer);
@@ -126,7 +134,21 @@ void Robot::RobotInit() {
               cout << "motor number: " << motor_number << endl;
               cout << "speed set to: " << output_value << endl;
               break;
+            }
+            case 1: // start autonomous mining
+              StartMining();
+              break;
+            case 2: // stop autonomous mining
+              StopMining();
+              break;
+            case 3: // start autonomous offload
+              result = StartOffload();
+              break;
+            case 4: // stop autonomous offload
+              StopOffload();
+              break;
           }
+          // serial.Write(result, 1);
           serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
         }
       }
@@ -162,6 +184,75 @@ void Robot::TeleopInit() {
 }
 
 static constexpr long double PI = 3.14159265358979323846;
+
+
+uint8_t Robot::StartMining() {
+
+  // if (is_mining && )
+
+  return 1;
+}
+
+uint8_t Robot::StopMining() {
+
+  return 1;
+}
+
+uint8_t Robot::StartOffload() {
+
+  if (!is_offload && !is_mining) {
+    is_offload = true;
+
+    // hopper belt
+    ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = HOPPER_BELT_MAX_VELO; 
+    // hopper_belt.SetControl(hopper_belt_velo);  
+
+    // hopper actuator
+    // while (hopper_actuator_pot.Get() < pot_max) {
+    //   hopper_actuator.Set(.1);
+    // }
+    
+    double actuator_power = -0.1;
+    hopper_actuator.Set(-actuator_power);
+
+    hopper_actuator.Set(0);
+
+    track_left.Set(.01);
+    track_right.Set(.01);
+
+    return 0;
+  } else {
+    if (is_offload) {
+      return 1;
+    } else {
+      return 3;
+    }
+  }
+}
+
+uint8_t Robot::StopOffload() {
+
+  if (is_offload && !is_mining) {
+    is_offload = false;
+
+    // hopper belt;
+    hopper_belt.Set(0);
+
+    // hopper actuator
+    while (hopper_actuator_pot.Get() > pot_default) {
+      hopper_actuator.Set(-.1);
+    }
+
+    return 0;
+  } else {
+    if (!is_offload) {
+      return 2;
+    } else {
+      return 3;
+    }
+  }
+}
+
 
 void Robot::TrencherControl()
 {
@@ -240,7 +331,6 @@ void Robot::TeleopPeriodic() {}
  * Turns off all motors when disabled
  */
 void Robot::DisabledInit() {
-  
   DisableAllMotors();
   serial_enable = false;
 }
