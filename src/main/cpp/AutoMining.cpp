@@ -111,7 +111,7 @@ void Robot::TrencherControl() {
 //   trencher.SetControl(trencherVelocity);
 }
 
-void Robot::AutoTrencherControl() {
+uint8_t Robot::StartAutoTrencherControl() {
   bool mineForward = true; // true if collecting, false if backwards
   bool miningMode = true; // true if mining autonomously, false if autonomy is off or driving
   double belt_percentage = 0.0; // I believe percentage
@@ -119,13 +119,10 @@ void Robot::AutoTrencherControl() {
 
   if (miningMode) {
     //TODO turn off tracks
+    //start trencher
     belt_percentage = 0.2;
     // TODO lower trencher
-    // TODO move tracks forward for x seconds
-    // TODO stop track movement if x seconds
-    //        raise trencher
-    //        stop trencher
-    //        mining mode false
+    // TODO move tracks forward
     if (!mineForward) {
       // in case trencher stuck will go backwards and forward
       belt_percentage *= -1.0;
@@ -134,13 +131,21 @@ void Robot::AutoTrencherControl() {
     trencher.SetControl(trencherVelocity);
   }
   else {
+    // TODO stop track movement
+    //        raise trencher
+    //        stop trencher
+    //        mining mode false
     //stop mining forward
+
     belt_percentage = 0;
     ctre::phoenix6::controls::VelocityVoltage trencherVelocity{TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
     trencher.SetControl(trencherVelocity);
     // TODO lift trencher
     
   }
+}
+
+uint8_t Robot::EndAutoTrencherControl() {
 }
 
 void Robot::HopperControl() {
@@ -160,7 +165,7 @@ void Robot::HopperControl() {
 }
 
 
-void Robot::AutoHopperControl() {
+uint8_t Robot::StartAutoHopperControl() {
   // Control Hopper Belt
   double belt_percentage = -logitech.GetRawAxis(LogitechConstants::LEFT_TRIGGER);
   if (logitech.GetRawButton(LogitechConstants::LB))
@@ -176,6 +181,21 @@ void Robot::AutoHopperControl() {
   hopper_actuator.Set(-actuator_power);
 }
 
+uint8_t Robot::EndAutoHopperControl() {
+  // Control Hopper Belt
+  double belt_percentage = -logitech.GetRawAxis(LogitechConstants::LEFT_TRIGGER);
+  if (logitech.GetRawButton(LogitechConstants::LB))
+  {
+    belt_percentage = -1.0 * belt_percentage;
+  }
+
+  ctre::phoenix6::controls::VelocityVoltage belt_velo{HOPPER_BELT_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
+  hopper_belt.SetControl(belt_velo);
+
+  // Control Hopper Actuator
+  double actuator_power = std::max(-logitech.GetRawAxis(LogitechConstants::RIGHT_JOY_Y), -0.1);
+  hopper_actuator.Set(-actuator_power);
+}
 
 void Robot::DriveTrainControl() {
 //   using namespace LogitechConstants;
@@ -211,38 +231,38 @@ void Robot::DriveTrainControl() {
 }
 
 
-void Robot::AutoDriveTrainControl() {
-  using namespace LogitechConstants;
+// void Robot::AutoDriveTrainControl() {
+//   using namespace LogitechConstants;
 
-  ctre::phoenix6::controls::VelocityVoltage m_voltageVelocity{0_tps, 1_tr_per_s_sq, false, 0_V, 0, false};
+//   ctre::phoenix6::controls::VelocityVoltage m_voltageVelocity{0_tps, 1_tr_per_s_sq, false, 0_V, 0, false};
 
-  const double stick_x = logitech.GetRawAxis(LEFT_JOY_X); 
-  const double stick_y = -logitech.GetRawAxis(LEFT_JOY_Y);
+//   const double stick_x = logitech.GetRawAxis(LEFT_JOY_X); 
+//   const double stick_y = -logitech.GetRawAxis(LEFT_JOY_Y);
 
-  const double theta = std::atan2(stick_x, stick_y);
-  double magnitude = std::sqrt(std::pow(stick_x, 2) + std::pow(stick_y, 2));
-  if (magnitude < 0.1) {
-    magnitude = 0;
-  }
+//   const double theta = std::atan2(stick_x, stick_y);
+//   double magnitude = std::sqrt(std::pow(stick_x, 2) + std::pow(stick_y, 2));
+//   if (magnitude < 0.1) {
+//     magnitude = 0;
+//   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_X)) {
-    drive_power_scale_factor = 1;
-  }
+//   if (logitech.GetRawButton(LogitechConstants::BUTTON_X)) {
+//     drive_power_scale_factor = 1;
+//   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_Y)) {
-    drive_power_scale_factor = 0.7;
-  }
+//   if (logitech.GetRawButton(LogitechConstants::BUTTON_Y)) {
+//     drive_power_scale_factor = 0.7;
+//   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
-    drive_power_scale_factor = 0.3;
-  }
+//   if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
+//     drive_power_scale_factor = 0.3;
+//   }
 
-  auto r_velo = drive_power_scale_factor * TRACKS_MAX_VELO * magnitude * std::cos(theta + (PI / 4));
-  auto l_velo = drive_power_scale_factor * TRACKS_MAX_VELO * magnitude * std::cos(theta - (PI / 4));
+//   auto r_velo = drive_power_scale_factor * TRACKS_MAX_VELO * magnitude * std::cos(theta + (PI / 4));
+//   auto l_velo = drive_power_scale_factor * TRACKS_MAX_VELO * magnitude * std::cos(theta - (PI / 4));
 
-  track_right.SetControl(m_voltageVelocity.WithVelocity(r_velo));
-  track_left.SetControl(m_voltageVelocity.WithVelocity(l_velo));
-}
+//   track_right.SetControl(m_voltageVelocity.WithVelocity(r_velo));
+//   track_left.SetControl(m_voltageVelocity.WithVelocity(l_velo));
+// }
 
 
 /**

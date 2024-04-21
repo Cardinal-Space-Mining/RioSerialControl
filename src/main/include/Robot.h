@@ -57,9 +57,10 @@ public:
   void DriveTrainControl();
   void HopperControl();
   void TrencherControl();
-  void AutoDriveTrainControl();
-  void AutoHopperControl();
-  void AutoTrencherControl();
+  uint8_t StartAutoHopperControl();
+  uint8_t EndAutoHopperControl();
+  uint8_t StartAutoTrencherControl();
+  uint8_t EndAutoTrencherControl();
   void ConfigTracks();
 
 
