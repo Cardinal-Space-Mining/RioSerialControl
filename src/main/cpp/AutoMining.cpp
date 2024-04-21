@@ -50,23 +50,6 @@ void Robot::ConfigTracks() {
   track_right.GetConfigurator().Apply(configs);
 }
 
-/**
- * Define constants
- * xon & xoff start end commands for RIO
- */
-void Robot::RobotInit() {
-  // add sendables to sender, register update callback
-  // this->nt_sender.putData(&this->pigeon_imu, "pigeon"); // need to test with actual device -- in sim this didn't add anything useful to NT
-  this->nt_sender.putData(this, "robot");
-  this->AddPeriodic([this] { this->nt_sender.updateValues(); }, 20_ms);
-  DisableAllMotors();
-  // runs every 1 millisec, this is what is actually reading input
-  AddPeriodic([this] { this->mgr.serial_periodic(); }, 1_ms);
-  Robot::defaultVelocityCfg(trencher);
-  Robot::defaultVelocityCfg(hopper_belt);
-  ConfigTracks();
-  track_right.SetInverted(true);
-}
 
 /**
  * eventually maybe not do this
@@ -78,25 +61,25 @@ void Robot::RobotPeriodic() {
 /**
  * Zeroing out all motors and enables serial to listen for opcodes
  */
-void Robot::AutonomousInit() {
-  // serial.Reset();
-  DisableAllMotors();
-  mgr.enable();
-}
+// void Robot::AutonomousInit() {
+//   // serial.Reset();
+//   DisableAllMotors();
+//   mgr.enable();
+// }
 
-/**
- * does nothing for now
- */
-void Robot::AutonomousPeriodic() {
-  mgr.enable();
-}
+// /**
+//  * does nothing for now
+//  */
+// void Robot::AutonomousPeriodic() {
+//   mgr.enable();
+// }
 
-/**
- * dont listen to serial, manual control of rover
- */
-void Robot::TeleopInit() {
-  mgr.disable();
-}
+// /**
+//  * dont listen to serial, manual control of rover
+//  */
+// void Robot::TeleopInit() {
+//   mgr.disable();
+// }
 
 static constexpr long double PI = 3.14159265358979323846;
 
@@ -298,17 +281,7 @@ void Robot::SimulationPeriodic() {}
  * end of nothing block
  */
 
-void Robot::InitSendable(wpi::SendableBuilder &builder) {
-  // builder.AddDoubleArrayProperty(
-  //     "pigeon rotation quat", [this]
-  //     {
-  //   frc::Rotation3d r = this->pigeon_imu.GetRotation3d();
-  //   static std::vector<double> _data;
-  //   _data.resize(4);
-  //   memcpy(_data.data(), &r.GetQuaternion(), sizeof(frc::Quaternion));
-  //   return _data; },
-  //     nullptr);
-}
+
 
 #ifndef RUNNING_FRC_TESTS
 int main() {

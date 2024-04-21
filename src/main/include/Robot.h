@@ -50,12 +50,6 @@ class Robot : public frc::TimedRobot {
   void SimulationPeriodic() override;
   void DisableAllMotors();
 
-  uint8_t StartMining();
-  uint8_t StopMining();
-
-  uint8_t StartOffload();
-  uint8_t StopOffload();
-
   void DriveTrainControl();
   void HopperControl();
   void TrencherControl();
