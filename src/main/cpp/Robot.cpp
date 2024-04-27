@@ -197,6 +197,7 @@ void Robot::TrencherControl() {
   trencher.SetControl(trencherVelocity);
 }
 
+
 void Robot::HopperControl() {
   // Control Hopper Belt
   double belt_percentage = -logitech.GetRawAxis(LogitechConstants::LEFT_TRIGGER);
