@@ -11,11 +11,7 @@
 #include <frc/smartdashboard/SendableChooser.h>
 #include <frc/SerialPort.h>
 #include <ctre/phoenix/motorcontrol/can/WPI_TalonFX.h>
-
-#include <frc/TimedRobot.h>
-#include <frc/smartdashboard/SendableChooser.h>
 #include <frc/AnalogPotentiometer.h>
-#include <frc/SerialPort.h>
 #include "frc/Joystick.h"
 #include "frc/XboxController.h"
 
@@ -67,7 +63,7 @@ class Robot : public frc::TimedRobot {
 
  private:
   // frc::SerialPort serial = frc::SerialPort(9600);
-  frc::SerialPort serial = frc::SerialPort(9600, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One);
+  frc::SerialPort serial = frc::SerialPort(115200, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One);
 
   
   char * input_buffer = (char *)malloc(sizeof(char) * BUF_SIZE);
@@ -100,10 +96,12 @@ class Robot : public frc::TimedRobot {
   TalonFX5 hopper_actuator = 4;
 
   // Actuator Potentiometer
-  double pot_max = 100;
-  double pot_default = 40;
+  double offload_depth = .95;
+  double reg_traversal_depth = .5;
+  double mining_to_offload_depth = .3;
+  double mining_depth = .027;
   // frc::AnalogInput hopper_actuator_pot_input {0};
-  frc::AnalogPotentiometer hopper_actuator_pot {0, pot_max, pot_default};
+  frc::AnalogPotentiometer hopper_actuator_pot {0};
 
   frc::Joystick logitech{0};
 
@@ -111,7 +109,8 @@ class Robot : public frc::TimedRobot {
 
   static constexpr auto TRENCHER_MAX_VELO = 50_tps;
   // static constexpr auto HOPPER_BELT_MAX_VELO = 60_tps;
-  static constexpr auto HOPPER_BELT_MAX_VELO = 8_tps;
+  static constexpr auto HOPPER_BELT_MAX_VELO = 30_tps;
   static constexpr auto TRACKS_MAX_VELO = 125_tps;
+  static constexpr auto TRACKS_MINING_MAX_VELO = 15_tps;
   static constexpr auto HOPPER_ACTUATOR_MAX_VELO = .2;  
 };

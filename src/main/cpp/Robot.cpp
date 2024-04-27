@@ -7,7 +7,7 @@
 #include <fmt/core.h>
 #include <frc/smartdashboard/SmartDashboard.h>
 #include <frc/AnalogPotentiometer.h>
-#include <frc/AnalogInput.h>
+// #include <frc/AnalogInput.h>
 
 #include <chrono>
 #include <iostream>
@@ -108,6 +108,8 @@ void Robot::RobotInit() {
 
   DisableAllMotors();
 
+  // serial.Reset();
+
   // runs every 1 millisec
   // this is what is actually reading input
   AddPeriodic([&] {
@@ -136,20 +138,25 @@ void Robot::RobotInit() {
               break;
             }
             case 1: // start autonomous mining
+              cout << "starting mining" << endl;
               StartMining();
               break;
             case 2: // stop autonomous mining
+              cout << "ending mining" << endl;
               StopMining();
               break;
             case 3: // start autonomous offload
-              result = StartOffload();
+              cout << "starting offload" << endl;
+              StartOffload();
               break;
             case 4: // stop autonomous offload
+              cout << "ending offload" << endl;
               StopOffload();
               break;
           }
           // serial.Write(result, 1);
           serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+          cout << "sent xoff" << endl;
         }
       }
     }
@@ -188,14 +195,83 @@ static constexpr long double PI = 3.14159265358979323846;
 
 uint8_t Robot::StartMining() {
 
-  // if (is_mining && )
+  if (!is_mining && !is_offload) {
 
-  return 1;
+    DisableAllMotors();
+
+    double belt_percentage = 0.5;
+    
+    ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
+    trencher.SetControl(trencher_velo);
+
+    while (true) {
+      
+      double pos = hopper_actuator_pot.Get();
+
+      cout << "position: " << pos << endl;
+
+      if (pos > mining_depth) {
+        hopper_actuator.Set(0.5);
+      } else {
+        hopper_actuator.Set(0.0);
+        break;
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
+    // drivetrain motion settings
+    ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
+    track_left.SetControl(drivetrain_velo);
+    track_right.SetControl(drivetrain_velo);
+
+  } else {
+    if (is_mining) {
+      return 1;
+    } else {
+      return 3;
+    }
+  }
+
+  return 0;
 }
 
 uint8_t Robot::StopMining() {
 
-  return 1;
+  if (is_mining && !is_offload) {
+
+    track_left.Set(0);
+    track_right.Set(0);
+
+    while (true) {
+
+      double pos = hopper_actuator_pot.Get();
+
+      cout << "position: " << pos << endl;
+
+      if (pos < mining_to_offload_depth) {
+        hopper_actuator.Set(0.5);
+      } else {
+        hopper_actuator.Set(0.0);
+        break;
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
+    // trencher.Set(0);
+
+    // DisableAllMotors();
+
+  } else {
+    if (!is_mining) {
+      return 1;
+    } else {
+      return 3;
+    }
+  }
+
+  return 0;
 }
 
 uint8_t Robot::StartOffload() {
@@ -203,19 +279,27 @@ uint8_t Robot::StartOffload() {
   if (!is_offload && !is_mining) {
     is_offload = true;
 
+    DisableAllMotors();
+
+    // hopper actuator    
+    double pos = hopper_actuator_pot.Get();
+
+    while (true) {
+      double pos = hopper_actuator_pot.Get();
+
+      if (pos < offload_depth) {
+        hopper_actuator.Set(-0.5);
+      } else {
+        hopper_actuator.Set(0.0);
+        break;
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+
     // hopper belt
     ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = HOPPER_BELT_MAX_VELO; 
-    // hopper_belt.SetControl(hopper_belt_velo);  
-
-    // hopper actuator
-    // while (hopper_actuator_pot.Get() < pot_max) {
-    //   hopper_actuator.Set(.1);
-    // }
-    
-    double actuator_power = -0.1;
-    hopper_actuator.Set(-actuator_power);
-
-    hopper_actuator.Set(0);
+    hopper_belt.SetControl(hopper_belt_velo); 
 
     track_left.Set(.01);
     track_right.Set(.01);
@@ -232,16 +316,39 @@ uint8_t Robot::StartOffload() {
 
 uint8_t Robot::StopOffload() {
 
-  if (is_offload && !is_mining) {
+  if ((is_offload && !is_mining) || true) {
     is_offload = false;
+
+    DisableAllMotors();
+
+    // stop moving forward
+    track_left.Set(0);
+    track_right.Set(0);
 
     // hopper belt;
     hopper_belt.Set(0);
 
-    // hopper actuator
-    while (hopper_actuator_pot.Get() > pot_default) {
-      hopper_actuator.Set(-.1);
+    // // hopper actuator
+    while (true) {
+      double pos = hopper_actuator_pot.Get();
+
+      cout << "Position: " << pos << endl;
+
+      if (pos > reg_traversal_depth) {
+        hopper_actuator.Set(0.5);
+      } else {
+        hopper_actuator.Set(0.0);
+        break;
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
+
+    cout << "in standard position" << endl;
+
+    hopper_actuator.Set(0);
+
+    DisableAllMotors();
 
     return 0;
   } else {
@@ -259,7 +366,7 @@ void Robot::TrencherControl()
   double belt_percentage = -logitech.GetRawAxis(LogitechConstants::RIGHT_TRIGGER);
   if (logitech.GetRawButton(LogitechConstants::RB))
   {
-    belt_percentage = -1.0 * belt_percentage;
+    belt_percentage = 1.0 * belt_percentage;
   }
 
   ctre::phoenix6::controls::VelocityVoltage trencherVelocity{TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
@@ -280,7 +387,9 @@ void Robot::HopperControl()
 
   // Control Hopper Actuator
   double actuator_power = std::max(-logitech.GetRawAxis(LogitechConstants::RIGHT_JOY_Y), -0.1);
-  hopper_actuator.Set(-actuator_power);
+  hopper_actuator.Set(actuator_power);
+
+  cout << "potentiometer: " << hopper_actuator_pot.Get() << endl;
 }
 
 void Robot::DriveTrainControl()
@@ -325,7 +434,11 @@ void Robot::DriveTrainControl()
 /**
  * nothing, will eventuall put here
  */
-void Robot::TeleopPeriodic() {}
+void Robot::TeleopPeriodic() {
+  this->DriveTrainControl();
+  this->HopperControl();
+  this->TrencherControl();
+}
 
 /**
  * Turns off all motors when disabled
