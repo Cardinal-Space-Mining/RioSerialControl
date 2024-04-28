@@ -58,9 +58,8 @@ void Robot::ConfigTracks()
   configs.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
   configs.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
 
-  configs.CurrentLimits.StatorCurrentLimitEnable = true;
-  configs.CurrentLimits.StatorCurrentLimit = 40; // Set max current in stator to 40A
-
+  configs.CurrentLimits.StatorCurrentLimitEnable = false;
+  
   track_left.GetConfigurator().Apply(configs);
   track_right.GetConfigurator().Apply(configs);
 }
@@ -98,7 +97,7 @@ char* Robot::itoa(int i, char b[]){
 void Robot::RobotInit() {
 
   trencher.SetInverted(true);
-  hopper_belt.SetInverted(true);
+  hopper_belt.SetInverted(false);
   track_right.SetInverted(true);
 
   serial.SetTimeout(units::second_t(.1));
@@ -161,6 +160,21 @@ void Robot::RobotInit() {
       }
     }
   }, 1_ms);
+
+  bool move_belt_mining = false;
+
+  AddPeriodic([&] {
+    if (is_mining) {
+
+      ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_MINING_VELO; 
+      hopper_belt.SetControl(hopper_belt_velo); 
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
+      hopper_belt.Set(0);
+
+    }
+  }, 50_ms);
 }
 
 /**
@@ -174,6 +188,8 @@ void Robot::RobotPeriodic() {}
 void Robot::AutonomousInit() {
   DisableAllMotors();
   serial_enable = true;
+  is_mining = false;
+  is_offload = false;
 }
 
 /**
@@ -188,6 +204,8 @@ void Robot::AutonomousPeriodic() {
  */
 void Robot::TeleopInit() {
   serial_enable = false;
+  is_mining = false;
+  is_offload = false;
 }
 
 static constexpr long double PI = 3.14159265358979323846;
@@ -197,9 +215,11 @@ uint8_t Robot::StartMining() {
 
   if (!is_mining && !is_offload) {
 
+    is_mining = true;
+
     DisableAllMotors();
 
-    double belt_percentage = 0.5;
+    double belt_percentage = 1.0;
     
     ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
     trencher.SetControl(trencher_velo);
@@ -207,8 +227,6 @@ uint8_t Robot::StartMining() {
     while (true) {
       
       double pos = hopper_actuator_pot.Get();
-
-      cout << "position: " << pos << endl;
 
       if (pos > mining_depth) {
         hopper_actuator.Set(0.5);
@@ -240,6 +258,11 @@ uint8_t Robot::StopMining() {
 
   if (is_mining && !is_offload) {
 
+    is_mining = false;
+
+    cout << "stopping mining" << endl;
+
+    hopper_belt.Set(0);
     track_left.Set(0);
     track_right.Set(0);
 
@@ -247,10 +270,8 @@ uint8_t Robot::StopMining() {
 
       double pos = hopper_actuator_pot.Get();
 
-      cout << "position: " << pos << endl;
-
       if (pos < mining_to_offload_depth) {
-        hopper_actuator.Set(0.5);
+        hopper_actuator.Set(-0.5);
       } else {
         hopper_actuator.Set(0.0);
         break;
@@ -259,9 +280,11 @@ uint8_t Robot::StopMining() {
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
 
-    // trencher.Set(0);
+    cout << "stop raising hopper from mining" << endl;
 
-    // DisableAllMotors();
+    trencher.Set(0);
+
+    DisableAllMotors();
 
   } else {
     if (!is_mining) {
@@ -298,7 +321,7 @@ uint8_t Robot::StartOffload() {
     }
 
     // hopper belt
-    ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = HOPPER_BELT_MAX_VELO; 
+    ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_VELO; 
     hopper_belt.SetControl(hopper_belt_velo); 
 
     track_left.Set(.01);
@@ -363,10 +386,10 @@ uint8_t Robot::StopOffload() {
 
 void Robot::TrencherControl()
 {
-  double belt_percentage = -logitech.GetRawAxis(LogitechConstants::RIGHT_TRIGGER);
+  double belt_percentage = logitech.GetRawAxis(LogitechConstants::RIGHT_TRIGGER);
   if (logitech.GetRawButton(LogitechConstants::RB))
   {
-    belt_percentage = 1.0 * belt_percentage;
+    belt_percentage = -1.0 * belt_percentage;
   }
 
   ctre::phoenix6::controls::VelocityVoltage trencherVelocity{TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
@@ -386,10 +409,9 @@ void Robot::HopperControl()
   hopper_belt.SetControl(belt_velo);
 
   // Control Hopper Actuator
-  double actuator_power = std::max(-logitech.GetRawAxis(LogitechConstants::RIGHT_JOY_Y), -0.1);
-  hopper_actuator.Set(actuator_power);
+  double actuator_power = -logitech.GetRawAxis(LogitechConstants::RIGHT_JOY_Y);
+  hopper_actuator.Set(-actuator_power);
 
-  cout << "potentiometer: " << hopper_actuator_pot.Get() << endl;
 }
 
 void Robot::DriveTrainControl()
@@ -430,6 +452,24 @@ void Robot::DriveTrainControl()
   track_left.SetControl(m_voltageVelocity.WithVelocity(l_velo));
 }
 
+void Robot::TeleopControl() {
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_A)) {
+    StartMining();
+  }
+
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
+    StopMining();
+  }
+
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_Y)) {
+    StartOffload();
+  }
+
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_X)) {
+    StopOffload();
+  }
+}
+
 
 /**
  * nothing, will eventuall put here
@@ -438,6 +478,9 @@ void Robot::TeleopPeriodic() {
   this->DriveTrainControl();
   this->HopperControl();
   this->TrencherControl();
+  this->TeleopControl();
+
+  serial_enable = false;
 }
 
 /**

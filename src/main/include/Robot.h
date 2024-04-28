@@ -55,6 +55,9 @@ class Robot : public frc::TimedRobot {
   void DriveTrainControl();
   void HopperControl();
   void TrencherControl();
+
+  void TeleopControl();
+
   void ConfigTracks();
 
   static void defaultVelocityCfg(TalonFX6& mtr);
@@ -98,8 +101,8 @@ class Robot : public frc::TimedRobot {
   // Actuator Potentiometer
   double offload_depth = .95;
   double reg_traversal_depth = .5;
-  double mining_to_offload_depth = .3;
-  double mining_depth = .027;
+  double mining_to_offload_depth = .45;
+  double mining_depth = .03;
   // frc::AnalogInput hopper_actuator_pot_input {0};
   frc::AnalogPotentiometer hopper_actuator_pot {0};
 
@@ -107,10 +110,10 @@ class Robot : public frc::TimedRobot {
 
   double drive_power_scale_factor = .7;
 
-  static constexpr auto TRENCHER_MAX_VELO = 50_tps;
-  // static constexpr auto HOPPER_BELT_MAX_VELO = 60_tps;
+  static constexpr auto TRENCHER_MAX_VELO = 60_tps;
   static constexpr auto HOPPER_BELT_MAX_VELO = 30_tps;
+  static constexpr auto HOPPER_BELT_MAX_MINING_VELO = 50_tps;
   static constexpr auto TRACKS_MAX_VELO = 125_tps;
-  static constexpr auto TRACKS_MINING_MAX_VELO = 15_tps;
+  static constexpr auto TRACKS_MINING_MAX_VELO = 8_tps;
   static constexpr auto HOPPER_ACTUATOR_MAX_VELO = .2;  
 };
