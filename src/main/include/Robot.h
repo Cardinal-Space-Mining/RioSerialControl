@@ -110,10 +110,14 @@ class Robot : public frc::TimedRobot {
 
   double drive_power_scale_factor = .7;
 
-  static constexpr auto TRENCHER_MAX_VELO = 60_tps;
+  static constexpr auto TRENCHER_MAX_VELO = 40_tps;
   static constexpr auto HOPPER_BELT_MAX_VELO = 30_tps;
-  static constexpr auto HOPPER_BELT_MAX_MINING_VELO = 50_tps;
+  static constexpr auto HOPPER_BELT_MAX_MINING_VELO = 10_tps;
   static constexpr auto TRACKS_MAX_VELO = 125_tps;
   static constexpr auto TRACKS_MINING_MAX_VELO = 8_tps;
   static constexpr auto HOPPER_ACTUATOR_MAX_VELO = .2;  
+
+  // constants for timing of hopper movement during mining
+  static constexpr units::time::millisecond_t hopper_belt_mine_wait_time = 100_ms;
+  static constexpr int hopper_belt_mine_run_time = 100; // in milliseconds
 };

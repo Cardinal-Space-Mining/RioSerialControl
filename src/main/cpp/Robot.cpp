@@ -121,7 +121,6 @@ void Robot::RobotInit() {
         {
           int function_number = *reinterpret_cast<int*>(input_buffer);
           uint8_t result;
-          cout << function_number << endl;
           switch (function_number) // choosing what to do based on opcode
           {
             case 0: //spinning up motor with params id and output
@@ -131,9 +130,6 @@ void Robot::RobotInit() {
               int motor_number = *reinterpret_cast<int*>(input_buffer);
               double output_value = *reinterpret_cast<double*>(input_buffer + 4);
               motors[motor_number].Set(output_value);
-
-              cout << "motor number: " << motor_number << endl;
-              cout << "speed set to: " << output_value << endl;
               break;
             }
             case 1: // start autonomous mining
@@ -155,13 +151,10 @@ void Robot::RobotInit() {
           }
           // serial.Write(result, 1);
           serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
-          cout << "sent xoff" << endl;
         }
       }
     }
   }, 1_ms);
-
-  bool move_belt_mining = false;
 
   AddPeriodic([&] {
     if (is_mining) {
@@ -169,12 +162,12 @@ void Robot::RobotInit() {
       ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_MINING_VELO; 
       hopper_belt.SetControl(hopper_belt_velo); 
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(150));
+      std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_run_time));
 
       hopper_belt.Set(0);
 
     }
-  }, 50_ms);
+  }, hopper_belt_mine_wait_time);
 }
 
 /**
@@ -203,6 +196,7 @@ void Robot::AutonomousPeriodic() {
  * dont listen to serial, manual control of rover
  */
 void Robot::TeleopInit() {
+  DisableAllMotors();
   serial_enable = false;
   is_mining = false;
   is_offload = false;
@@ -219,9 +213,9 @@ uint8_t Robot::StartMining() {
 
     DisableAllMotors();
 
-    double belt_percentage = 1.0;
+    // double belt_percentage = 1.0;
     
-    ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO * belt_percentage, 5_tr_per_s_sq, false, 0_V, 0, false};
+    ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false};
     trencher.SetControl(trencher_velo);
 
     while (true) {
@@ -243,6 +237,10 @@ uint8_t Robot::StartMining() {
     track_left.SetControl(drivetrain_velo);
     track_right.SetControl(drivetrain_velo);
 
+    // // for teleop or mining for specified time uncomment this block:
+    // std::this_thread::sleep_for(std::chrono::seconds(10));
+    // StopMining();
+
   } else {
     if (is_mining) {
       return 1;
@@ -259,8 +257,6 @@ uint8_t Robot::StopMining() {
   if (is_mining && !is_offload) {
 
     is_mining = false;
-
-    cout << "stopping mining" << endl;
 
     hopper_belt.Set(0);
     track_left.Set(0);
@@ -279,8 +275,6 @@ uint8_t Robot::StopMining() {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
-
-    cout << "stop raising hopper from mining" << endl;
 
     trencher.Set(0);
 
@@ -327,6 +321,10 @@ uint8_t Robot::StartOffload() {
     track_left.Set(.01);
     track_right.Set(.01);
 
+    // // for timed offloading uncomment this block
+    // std::this_thread::sleep_for(std::chrono::seconds(4));
+    // StopOffload();
+
     return 0;
   } else {
     if (is_offload) {
@@ -355,8 +353,6 @@ uint8_t Robot::StopOffload() {
     while (true) {
       double pos = hopper_actuator_pot.Get();
 
-      cout << "Position: " << pos << endl;
-
       if (pos > reg_traversal_depth) {
         hopper_actuator.Set(0.5);
       } else {
@@ -366,8 +362,6 @@ uint8_t Robot::StopOffload() {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(250));
     }
-
-    cout << "in standard position" << endl;
 
     hopper_actuator.Set(0);
 
@@ -430,20 +424,20 @@ void Robot::DriveTrainControl()
     magnitude = 0;
   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_X))
-  {
-    drive_power_scale_factor = 1;
-  }
+  // if (logitech.GetRawButton(LogitechConstants::BUTTON_X))
+  // {
+  //   drive_power_scale_factor = 1;
+  // }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_Y))
-  {
-    drive_power_scale_factor = 0.7;
-  }
+  // if (logitech.GetRawButton(LogitechConstants::BUTTON_Y))
+  // {
+  //   drive_power_scale_factor = 0.7;
+  // }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_B))
-  {
-    drive_power_scale_factor = 0.3;
-  }
+  // if (logitech.GetRawButton(LogitechConstants::BUTTON_B))
+  // {
+  //   drive_power_scale_factor = 0.3;
+  // }
 
   auto r_velo = drive_power_scale_factor * TRACKS_MAX_VELO * magnitude * std::cos(theta + (PI / 4));
   auto l_velo = drive_power_scale_factor * TRACKS_MAX_VELO * magnitude * std::cos(theta - (PI / 4));
@@ -453,6 +447,7 @@ void Robot::DriveTrainControl()
 }
 
 void Robot::TeleopControl() {
+
   if (logitech.GetRawButton(LogitechConstants::BUTTON_A)) {
     StartMining();
   }
