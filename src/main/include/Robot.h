@@ -117,7 +117,10 @@ class Robot : public frc::TimedRobot {
   static constexpr auto TRACKS_MINING_MAX_VELO = 8_tps;
   static constexpr auto HOPPER_ACTUATOR_MAX_VELO = .2;  
 
+  // constant for how long each mining run is in time (seconds)
+  static constexpr auto mining_run_time = 10;
+
   // constants for timing of hopper movement during mining
-  static constexpr units::time::millisecond_t hopper_belt_mine_wait_time = 100_ms;
+  static constexpr int hopper_belt_mine_wait_time = 750; // in milliseconds
   static constexpr int hopper_belt_mine_run_time = 100; // in milliseconds
 };
