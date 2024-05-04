@@ -136,19 +136,15 @@ void Robot::RobotInit() {
               break;
             }
             case 1: // start autonomous mining
-              cout << "starting mining" << endl;
               StartMining();
               break;
             case 2: // stop autonomous mining
-              cout << "ending mining" << endl;
               StopMining();
               break;
             case 3: // start autonomous offload
-              cout << "starting offload" << endl;
               StartOffload();
               break;
             case 4: // stop autonomous offload
-              cout << "ending offload" << endl;
               StopOffload();
               break;
           }
@@ -158,19 +154,6 @@ void Robot::RobotInit() {
       }
     }
   }, 1_ms);
-
-  AddPeriodic([&] {
-    if (is_mining) {
-
-      ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_MINING_VELO; 
-      hopper_belt.SetControl(hopper_belt_velo); 
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_run_time));
-
-      hopper_belt.Set(0);
-
-    }
-  }, hopper_belt_mine_wait_time);
 
   AddPeriodic([&] {
     // moving average current check
@@ -238,8 +221,6 @@ uint8_t Robot::StartMining() {
 
   if (!is_mining && !is_offload) {
 
-    is_mining = true;
-
     DisableAllMotors();
 
     // double belt_percentage = 1.0;
@@ -266,10 +247,25 @@ uint8_t Robot::StartMining() {
     track_left.SetControl(drivetrain_velo);
     track_right.SetControl(drivetrain_velo);
 
-    // // for teleop or mining for specified time uncomment this block:
-    if (!serial_enable) {
-      std::this_thread::sleep_for(std::chrono::seconds(10));
-      StopMining();
+    is_mining = true;
+
+
+    auto start_time = std::chrono::system_clock::now();
+    while (true) {
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+      if (duration.count() > mining_run_time) {
+        StopMining();
+        break;
+      } else {
+        ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_MINING_VELO; 
+        hopper_belt.SetControl(hopper_belt_velo); 
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_run_time));
+
+        hopper_belt.Set(0);
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_wait_time));
     }
 
   } else {
@@ -353,9 +349,18 @@ uint8_t Robot::StartOffload() {
     track_right.Set(.01);
 
     // // for timed offloading uncomment this block
-    if (!serial_enable) {
-      std::this_thread::sleep_for(std::chrono::seconds(4));
-      StopOffload();
+    // if (!serial_enable) {
+    //   std::this_thread::sleep_for(std::chrono::seconds(6));
+    //   StopOffload();
+    // }
+
+    auto start_time = std::chrono::system_clock::now();
+    while (true) {
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+      if (duration.count() > 6) {
+        StopOffload();
+        break;
+      }
     }
 
     return 0;
@@ -485,17 +490,10 @@ void Robot::TeleopControl() {
     StartMining();
   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
-    StopMining();
-  }
-
   if (logitech.GetRawButton(LogitechConstants::BUTTON_Y)) {
     StartOffload();
   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_X)) {
-    StopOffload();
-  }
 }
 
 
