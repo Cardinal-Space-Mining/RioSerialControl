@@ -122,6 +122,7 @@ class Robot : public frc::TimedRobot {
 
   // constant for how long each mining run is in time (seconds)
   static constexpr auto mining_run_time = 10;
+  std::chrono::system_clock::time_point start_time;
 
   // constants for timing of hopper movement during mining
   static constexpr int hopper_belt_mine_wait_time = 750; // in milliseconds

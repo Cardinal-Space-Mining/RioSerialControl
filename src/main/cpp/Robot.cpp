@@ -155,6 +155,24 @@ void Robot::RobotInit() {
     }
   }, 1_ms);
 
+  AddPeriodic([&] {
+    if (is_mining) {
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+      if (duration.count() > mining_run_time) {
+        StopMining();
+      } else {
+
+        // ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false};
+        // trencher.SetControl(trencher_velo);
+
+        // // drivetrain motion settings
+        // ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
+        // track_left.SetControl(drivetrain_velo);
+        // track_right.SetControl(drivetrain_velo);
+      }
+    }
+  }, 1_ms);
+
   // AddPeriodic([&] {
   //   // TODO needs to be moved to mining algorithm bc its in while loop
   //   // moving average current check
@@ -264,6 +282,8 @@ uint8_t Robot::StartMining() {
       
       double pos = hopper_actuator_pot.Get();
 
+      // cout << "pos: " << pos << endl;
+
       if (pos > mining_depth) {
         hopper_actuator.Set(0.5);
       } else {
@@ -281,50 +301,51 @@ uint8_t Robot::StartMining() {
 
     is_mining = true;
 
+    start_time = std::chrono::system_clock::now();
 
-    auto start_time = std::chrono::system_clock::now();
-    while (true) {
-      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
-      if (duration.count() > mining_run_time) {
-        StopMining();
-        break;
-      } 
-      else {
-        ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_MINING_VELO; 
-        hopper_belt.SetControl(hopper_belt_velo); 
+    // auto start_time = std::chrono::system_clock::now();
+    // while (true) {
+    //   auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+    //   if (duration.count() > mining_run_time) {
+    //     StopMining();
+    //     break;
+    //   } 
+    //   else {
+    //     ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_MINING_VELO; 
+    //     hopper_belt.SetControl(hopper_belt_velo); 
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_run_time));
+    //     std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_run_time));
 
-        hopper_belt.Set(0);
+    //     hopper_belt.Set(0);
 
-        if (getMovingAvg() == 1) {
-          hopper_belt.Set(0);
-          track_left.Set(0);
-          track_right.Set(0);
-          // trencher.Set(0);
-          while(true) {
-            double pos = hopper_actuator_pot.Get();
-            if (pos < mining_to_offload_depth) {
-              hopper_actuator.Set(-0.5);
-            } 
-            else {
-              hopper_actuator.Set(0.0);
-              break;
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(250));
-          }
-          // lift trencher 
-          // drive back
-          // start mining again
-          trenchAvgCurrent = 0;
-          motorDataList.clear();
-          track_left.SetControl(drivetrain_velo);
-          track_right.SetControl(drivetrain_velo);
-        }
-      }
+    //     if (getMovingAvg() == 1) {
+    //       hopper_belt.Set(0);
+    //       track_left.Set(0);
+    //       track_right.Set(0);
+    //       // trencher.Set(0);
+    //       while(true) {
+    //         double pos = hopper_actuator_pot.Get();
+    //         if (pos < mining_to_offload_depth) {
+    //           hopper_actuator.Set(-0.5);
+    //         } 
+    //         else {
+    //           hopper_actuator.Set(0.0);
+    //           break;
+    //         }
+    //         std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    //       }
+    //       // lift trencher 
+    //       // drive back
+    //       // start mining again
+    //       trenchAvgCurrent = 0;
+    //       motorDataList.clear();
+    //       track_left.SetControl(drivetrain_velo);
+    //       track_right.SetControl(drivetrain_velo);
+    //     }
+    //   }
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_wait_time));
-    }
+    //   std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_wait_time));
+    // }
 
   } else {
     if (is_mining) {
@@ -548,8 +569,16 @@ void Robot::TeleopControl() {
     StartMining();
   }
 
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
+    StopMining();
+  }
+
   if (logitech.GetRawButton(LogitechConstants::BUTTON_Y)) {
     StartOffload();
+  }
+
+  if (logitech.GetRawButton(LogitechConstants::BUTTON_X)) {
+    StopOffload();
   }
 
 }
@@ -559,6 +588,11 @@ void Robot::TeleopControl() {
  * nothing, will eventuall put here
  */
 void Robot::TeleopPeriodic() {
+  // if (is_mining || is_offload)
+  // {
+  //   return;
+  // }
+  
   this->DriveTrainControl();
   this->HopperControl();
   this->TrencherControl();
