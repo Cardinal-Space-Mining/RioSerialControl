@@ -53,6 +53,8 @@ class Robot : public frc::TimedRobot {
   uint8_t StartOffload();
   uint8_t StopOffload();
 
+  uint8_t getMovingAvg();
+
   void DriveTrainControl();
   void HopperControl();
   void TrencherControl();
@@ -128,6 +130,6 @@ class Robot : public frc::TimedRobot {
   // Variables for moving average
   uint8_t movingAvgRange = 10;
   double trenchAvgCurrent = 0.0;
-  double safteyAvgCurrent = 50.0;
+  const double safteyAvgCurrent = 50.0;
   std::deque<double> motorDataList;
 };

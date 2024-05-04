@@ -155,30 +155,45 @@ void Robot::RobotInit() {
     }
   }, 1_ms);
 
-  AddPeriodic([&] {
-    // moving average current check
-    if (is_mining) {
-      // TODO get current from trencher
-      double newCurrent = 1.0;
-      motorDataList.push_back(newCurrent);
-      double currentAverage = 0;
-      if (motorDataList.size() > movingAvgRange) {
-        motorDataList.pop_front();
-      }
-      currentAverage = std::accumulate(motorDataList.begin(), motorDataList.end(), 0.0);
-      currentAverage /= motorDataList.size();
-      trenchAvgCurrent = currentAverage;
-      if (trenchAvgCurrent > safteyAvgCurrent) {
-        DisableAllMotors();
-        // turn off mining and hopper modes
-        // lift trencher 
-        // drive back
-        // start mining again
-        trenchAvgCurrent = 0;
-        motorDataList.clear();
-      }
-    }
-  }, 1_ms);
+  // AddPeriodic([&] {
+  //   // TODO needs to be moved to mining algorithm bc its in while loop
+  //   // moving average current check
+  //   if (is_mining) {
+  //     // TODO get current from trencher
+  //     double newCurrent = 1.0;
+  //     motorDataList.push_back(newCurrent);
+  //     double currentAverage = 0;
+  //     if (motorDataList.size() > movingAvgRange) {
+  //       motorDataList.pop_front();
+  //     }
+  //     currentAverage = std::accumulate(motorDataList.begin(), motorDataList.end(), 0.0);
+  //     currentAverage /= motorDataList.size();
+  //     trenchAvgCurrent = currentAverage;
+  //     if (trenchAvgCurrent > safteyAvgCurrent) {
+  //       // DisableAllMotors();
+  //       hopper_belt.Set(0);
+  //       track_left.Set(0);
+  //       track_right.Set(0);
+  //       // trencher.Set(0);
+  //       while(true) {
+  //         double pos = hopper_actuator_pot.Get();
+  //         if (pos < mining_to_offload_depth) {
+  //           hopper_actuator.Set(-0.5);
+  //         } 
+  //         else {
+  //           hopper_actuator.Set(0.0);
+  //           break;
+  //         }
+  //         std::this_thread::sleep_for(std::chrono::milliseconds(250));
+  //       }
+  //       // lift trencher 
+  //       // drive back
+  //       // start mining again
+  //       trenchAvgCurrent = 0;
+  //       motorDataList.clear();
+  //     }
+  //   }
+  // }, 100_ms);
 
 }
 
@@ -216,6 +231,23 @@ void Robot::TeleopInit() {
 
 static constexpr long double PI = 3.14159265358979323846;
 
+uint8_t Robot::getMovingAvg() {
+  double newCurrent = 1.0;
+  motorDataList.push_back(newCurrent);
+  double currentAverage = 0;
+  if (motorDataList.size() > movingAvgRange) {
+    motorDataList.pop_front();
+  }
+  currentAverage = std::accumulate(motorDataList.begin(), motorDataList.end(), 0.0);
+  currentAverage /= motorDataList.size();
+  trenchAvgCurrent = currentAverage;
+  if (trenchAvgCurrent > safteyAvgCurrent) {
+    return 1;
+  }
+  else {
+    return 0;
+  }
+}
 
 uint8_t Robot::StartMining() {
 
@@ -256,13 +288,39 @@ uint8_t Robot::StartMining() {
       if (duration.count() > mining_run_time) {
         StopMining();
         break;
-      } else {
+      } 
+      else {
         ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_MINING_VELO; 
         hopper_belt.SetControl(hopper_belt_velo); 
 
         std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_run_time));
 
         hopper_belt.Set(0);
+
+        if (getMovingAvg() == 1) {
+          hopper_belt.Set(0);
+          track_left.Set(0);
+          track_right.Set(0);
+          // trencher.Set(0);
+          while(true) {
+            double pos = hopper_actuator_pot.Get();
+            if (pos < mining_to_offload_depth) {
+              hopper_actuator.Set(-0.5);
+            } 
+            else {
+              hopper_actuator.Set(0.0);
+              break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+          }
+          // lift trencher 
+          // drive back
+          // start mining again
+          trenchAvgCurrent = 0;
+          motorDataList.clear();
+          track_left.SetControl(drivetrain_velo);
+          track_right.SetControl(drivetrain_velo);
+        }
       }
 
       std::this_thread::sleep_for(std::chrono::milliseconds(hopper_belt_mine_wait_time));
