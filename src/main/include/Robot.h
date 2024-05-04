@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <string>
+#include <deque>
 
 #include <frc/TimedRobot.h>
 #include <frc/smartdashboard/SendableChooser.h>
@@ -120,4 +121,10 @@ class Robot : public frc::TimedRobot {
   // constants for timing of hopper movement during mining
   static constexpr units::time::millisecond_t hopper_belt_mine_wait_time = 100_ms;
   static constexpr int hopper_belt_mine_run_time = 100; // in milliseconds
+
+  // Variables for moving average
+  uint8_t movingAvgRange = 10;
+  double trenchAvgCurrent = 0.0;
+  double safteyAvgCurrent = 50.0;
+  std::deque<double> motorDataList;
 };

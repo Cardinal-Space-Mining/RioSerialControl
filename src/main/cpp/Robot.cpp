@@ -14,6 +14,9 @@
 // #include <sys/time.h>
 #include <ctime>
 #include <cmath>
+#include <vector>
+#include <deque>
+#include <numeric>
 
 #include "LogitechConstants.hpp"
 
@@ -168,6 +171,32 @@ void Robot::RobotInit() {
 
     }
   }, hopper_belt_mine_wait_time);
+
+  AddPeriodic([&] {
+    // moving average current check
+    if (is_mining) {
+      // TODO get current from trencher
+      double newCurrent = 1.0;
+      motorDataList.push_back(newCurrent);
+      double currentAverage = 0;
+      if (motorDataList.size() > movingAvgRange) {
+        motorDataList.pop_front();
+      }
+      currentAverage = std::accumulate(motorDataList.begin(), motorDataList.end(), 0.0);
+      currentAverage /= motorDataList.size();
+      trenchAvgCurrent = currentAverage;
+      if (trenchAvgCurrent > safteyAvgCurrent) {
+        DisableAllMotors();
+        // turn off mining and hopper modes
+        // lift trencher 
+        // drive back
+        // start mining again
+        trenchAvgCurrent = 0;
+        motorDataList.clear();
+      }
+    }
+  }, 1_ms);
+
 }
 
 /**
