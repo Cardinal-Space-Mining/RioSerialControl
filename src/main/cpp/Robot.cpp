@@ -133,21 +133,19 @@ void Robot::RobotInit() {
               break;
             }
             case 1: // start autonomous mining
-              result = StartMining();
+              StartMining();
               break;
             case 2: // stop autonomous mining
-              result = StopMining();
+              StopMining();
               break;
             case 3: // start autonomous offload
-              result = StartOffload();
+              StartOffload();
               break;
             case 4: // stop autonomous offload
-              result = StopOffload();
+              StopOffload();
               break;
           }
-          char * result_buffer = (char *)malloc(sizeof(char) * 1);
-          cout << result_buffer << endl;
-          serial.Write(itoa(result, result_buffer), sizeof(result));
+          // serial.Write(result, 1);
           serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
         }
       }
