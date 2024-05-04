@@ -238,8 +238,10 @@ uint8_t Robot::StartMining() {
     track_right.SetControl(drivetrain_velo);
 
     // // for teleop or mining for specified time uncomment this block:
-    // std::this_thread::sleep_for(std::chrono::seconds(10));
-    // StopMining();
+    if (!serial_enable) {
+      std::this_thread::sleep_for(std::chrono::seconds(10));
+      StopMining();
+    }
 
   } else {
     if (is_mining) {
@@ -322,8 +324,10 @@ uint8_t Robot::StartOffload() {
     track_right.Set(.01);
 
     // // for timed offloading uncomment this block
-    // std::this_thread::sleep_for(std::chrono::seconds(4));
-    // StopOffload();
+    if (!serial_enable) {
+      std::this_thread::sleep_for(std::chrono::seconds(4));
+      StopOffload();
+    }
 
     return 0;
   } else {
