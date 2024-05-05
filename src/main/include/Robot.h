@@ -81,6 +81,7 @@ class Robot : public frc::TimedRobot {
 
   bool is_mining = false;
   bool is_offload = false;
+  bool finished_cycle = false;
 
   // ctre::phoenix::motorcontrol::can::TalonFX motors[MOTOR_COUNT] = {ctre::phoenix::motorcontrol::can::TalonFX(1)};
   // std::array<ctre::pheonix6::hardware::TalonFX, 1> mts = {
@@ -120,9 +121,16 @@ class Robot : public frc::TimedRobot {
   static constexpr auto TRACKS_MINING_MAX_VELO = 8_tps;
   static constexpr auto HOPPER_ACTUATOR_MAX_VELO = .2;  
 
+  
+  bool time_set = false;
+  std::chrono::system_clock::time_point start_time;
   // constant for how long each mining run is in time (seconds)
   static constexpr auto mining_run_time = 10;
-  std::chrono::system_clock::time_point start_time;
+  // constant for how long each offload run is in time (seconds)
+  bool is_offload_pos = false;
+  std::chrono::system_clock::time_point start_move_time_off;
+  static constexpr auto offload_move_time = 3;
+  static constexpr auto offload_run_time = 6;
 
   // constants for timing of hopper movement during mining
   static constexpr int hopper_belt_mine_wait_time = 750; // in milliseconds

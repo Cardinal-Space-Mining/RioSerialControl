@@ -155,23 +155,134 @@ void Robot::RobotInit() {
     }
   }, 1_ms);
 
+  // start mining lower actuators
   AddPeriodic([&] {
-    if (is_mining) {
-      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
-      if (duration.count() > mining_run_time) {
-        StopMining();
+    if (is_mining && !time_set) {
+
+      double pos = hopper_actuator_pot.Get();
+
+      if (pos > mining_depth) {
+        hopper_actuator.Set(0.5);
       } else {
-
-        // ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false};
-        // trencher.SetControl(trencher_velo);
-
-        // // drivetrain motion settings
-        // ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
-        // track_left.SetControl(drivetrain_velo);
-        // track_right.SetControl(drivetrain_velo);
+        hopper_actuator.Set(0.0);
+        time_set = true;
+        start_time = std::chrono::system_clock::now();
       }
     }
   }, 1_ms);
+
+  // keep track of mining time, has reached run time?
+  AddPeriodic([&] {
+    if (is_mining && time_set && !finished_cycle) {
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+      if (duration.count() > mining_run_time) {
+        StopMining();
+      }
+
+      if (time_set) {
+        // drivetrain motion settings
+        ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
+        track_left.SetControl(drivetrain_velo);
+        track_right.SetControl(drivetrain_velo);
+      }
+    }
+  }, 100_ms);
+
+  // raise hopper from mining position
+  AddPeriodic([&] {
+    if (finished_cycle && is_mining) {
+      
+      double pos = hopper_actuator_pot.Get();
+
+      track_right.Set(0);
+      track_left.Set(0);
+
+      if (pos < mining_to_offload_depth) {
+        hopper_actuator.Set(-0.5);
+      } else {
+        is_mining = false;
+        finished_cycle = false;
+        DisableAllMotors();
+      }
+    }
+  }, 1_ms);
+
+
+  // move to offload position
+  AddPeriodic([&] {
+    if (is_offload && !is_offload_pos) {
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_move_time_off);
+
+      if (duration.count() > offload_move_time) {
+        is_offload_pos = true;
+        track_left.Set(0);
+        track_right.Set(0);
+      } else {
+        ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MAX_VELO * -0.25, 1_tr_per_s_sq, false, 0_V, 0, false};
+        track_left.SetControl(drivetrain_velo);
+        track_right.SetControl(drivetrain_velo);
+      }
+    }
+  }, 10_ms);
+
+  // start offload raise actuators
+  AddPeriodic([&] {
+    if (is_offload && is_offload_pos && !time_set) {
+      double pos = hopper_actuator_pot.Get();
+
+      if (pos < offload_depth) {
+        hopper_actuator.Set(-0.5);
+      } else {
+        hopper_actuator.Set(0.0);
+        time_set = true;
+        start_time = std::chrono::system_clock::now();
+      }
+    }
+  }, 1_ms);
+
+  // keep track of offload time, has reached run time?
+  AddPeriodic([&] {
+    if (is_offload && time_set && !finished_cycle) {
+      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+      if (duration.count() > offload_run_time) {
+        hopper_actuator.Set(0);
+        time_set = false;
+        StopOffload();
+      }
+
+      if (time_set) {
+        // move motors here
+        // hopper belt
+        ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_VELO; 
+        hopper_belt.SetControl(hopper_belt_velo); 
+
+        track_left.Set(.025);
+        track_right.Set(.025);
+      }
+    }
+  }, 100_ms);
+
+  // lower hopper from offload postition
+  AddPeriodic([&] {
+    if (is_offload && finished_cycle) {
+
+      double pos = hopper_actuator_pot.Get();
+
+      if (pos > reg_traversal_depth) {
+        hopper_actuator.Set(0.5);
+      } else {
+        is_offload_pos = false;
+        is_offload = false;
+        finished_cycle = false;
+        DisableAllMotors();
+      }
+    }
+  }, 1_ms);
+
+  // keep track of offload time, has reached run time?
+  // AddPeriodic([&] {
+  //   if (is_offload && !tim)
+  // }, 100_ms);
 
   // AddPeriodic([&] {
   //   // TODO needs to be moved to mining algorithm bc its in while loop
@@ -272,32 +383,12 @@ uint8_t Robot::StartMining() {
   if (!is_mining && !is_offload) {
 
     DisableAllMotors();
+    time_set = false;
 
     // double belt_percentage = 1.0;
     
     ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false};
     trencher.SetControl(trencher_velo);
-
-    while (true) {
-      
-      double pos = hopper_actuator_pot.Get();
-
-      // cout << "pos: " << pos << endl;
-
-      if (pos > mining_depth) {
-        hopper_actuator.Set(0.5);
-      } else {
-        hopper_actuator.Set(0.0);
-        break;
-      }
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    }
-
-    // drivetrain motion settings
-    ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
-    track_left.SetControl(drivetrain_velo);
-    track_right.SetControl(drivetrain_velo);
 
     is_mining = true;
 
@@ -362,29 +453,9 @@ uint8_t Robot::StopMining() {
 
   if (is_mining && !is_offload) {
 
-    is_mining = false;
-
-    hopper_belt.Set(0);
-    track_left.Set(0);
-    track_right.Set(0);
-
-    while (true) {
-
-      double pos = hopper_actuator_pot.Get();
-
-      if (pos < mining_to_offload_depth) {
-        hopper_actuator.Set(-0.5);
-      } else {
-        hopper_actuator.Set(0.0);
-        break;
-      }
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    }
-
-    trencher.Set(0);
-
     DisableAllMotors();
+
+    finished_cycle = true;
 
   } else {
     if (!is_mining) {
@@ -400,32 +471,34 @@ uint8_t Robot::StopMining() {
 uint8_t Robot::StartOffload() {
 
   if (!is_offload && !is_mining) {
-    is_offload = true;
 
     DisableAllMotors();
+    time_set = false;
+    is_offload_pos = false;
 
-    // hopper actuator    
-    double pos = hopper_actuator_pot.Get();
+    is_offload = true;
+    start_time = std::chrono::system_clock::now();
+    start_move_time_off = std::chrono::system_clock::now();
 
-    while (true) {
-      double pos = hopper_actuator_pot.Get();
+    // while (true) {
+    //   double pos = hopper_actuator_pot.Get();
 
-      if (pos < offload_depth) {
-        hopper_actuator.Set(-0.5);
-      } else {
-        hopper_actuator.Set(0.0);
-        break;
-      }
+    //   if (pos < offload_depth) {
+    //     hopper_actuator.Set(-0.5);
+    //   } else {
+    //     hopper_actuator.Set(0.0);
+    //     break;
+    //   }
 
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    }
+    //   std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    // }
 
-    // hopper belt
-    ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_VELO; 
-    hopper_belt.SetControl(hopper_belt_velo); 
+    // // hopper belt
+    // ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_VELO; 
+    // hopper_belt.SetControl(hopper_belt_velo); 
 
-    track_left.Set(.01);
-    track_right.Set(.01);
+    // track_left.Set(.01);
+    // track_right.Set(.01);
 
     // // for timed offloading uncomment this block
     // if (!serial_enable) {
@@ -433,14 +506,14 @@ uint8_t Robot::StartOffload() {
     //   StopOffload();
     // }
 
-    auto start_time = std::chrono::system_clock::now();
-    while (true) {
-      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
-      if (duration.count() > 6) {
-        StopOffload();
-        break;
-      }
-    }
+    // auto start_time = std::chrono::system_clock::now();
+    // while (true) {
+    //   auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+    //   if (duration.count() > 6) {
+    //     StopOffload();
+    //     break;
+    //   }
+    // }
 
     return 0;
   } else {
@@ -455,34 +528,10 @@ uint8_t Robot::StartOffload() {
 uint8_t Robot::StopOffload() {
 
   if ((is_offload && !is_mining) || true) {
-    is_offload = false;
 
     DisableAllMotors();
 
-    // stop moving forward
-    track_left.Set(0);
-    track_right.Set(0);
-
-    // hopper belt;
-    hopper_belt.Set(0);
-
-    // // hopper actuator
-    while (true) {
-      double pos = hopper_actuator_pot.Get();
-
-      if (pos > reg_traversal_depth) {
-        hopper_actuator.Set(0.5);
-      } else {
-        hopper_actuator.Set(0.0);
-        break;
-      }
-
-      std::this_thread::sleep_for(std::chrono::milliseconds(250));
-    }
-
-    hopper_actuator.Set(0);
-
-    DisableAllMotors();
+    finished_cycle = true;
 
     return 0;
   } else {
@@ -588,10 +637,10 @@ void Robot::TeleopControl() {
  * nothing, will eventuall put here
  */
 void Robot::TeleopPeriodic() {
-  // if (is_mining || is_offload)
-  // {
-  //   return;
-  // }
+  if (is_mining || is_offload)
+  {
+    return;
+  }
   
   this->DriveTrainControl();
   this->HopperControl();
