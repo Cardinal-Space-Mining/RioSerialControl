@@ -132,7 +132,7 @@ void Robot::RobotInit() {
 
               int motor_number = *reinterpret_cast<int*>(input_buffer);
               double output_value = *reinterpret_cast<double*>(input_buffer + 4);
-              motors[motor_number].Set(output_value);
+              (*motors[motor_number]).Set(output_value);
               break;
             }
             case 1: // start autonomous mining
@@ -172,11 +172,14 @@ void Robot::RobotInit() {
   }, 1_ms);
 
   // keep track of mining time, has reached run time?
+  bool on_off = false;
   AddPeriodic([&] {
     if (is_mining && time_set && !finished_cycle) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
       if (duration.count() > mining_run_time) {
         StopMining();
+        ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false};
+        trencher.SetControl(trencher_velo);
       }
 
       if (time_set) {
@@ -184,6 +187,18 @@ void Robot::RobotInit() {
         ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
         track_left.SetControl(drivetrain_velo);
         track_right.SetControl(drivetrain_velo);
+
+        if (!on_off) {
+          ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
+          hopper_belt.SetControl(hopper_belt_velo);
+
+          on_off = !on_off;
+        } else {
+          hopper_belt.Set(0);
+          on_off = !on_off;
+        }
+
+        
       }
     }
   }, 100_ms);
@@ -198,7 +213,7 @@ void Robot::RobotInit() {
       track_left.Set(0);
 
       if (pos < mining_to_offload_depth) {
-        hopper_actuator.Set(-0.5);
+        hopper_actuator.Set(-1.0);
       } else {
         is_mining = false;
         finished_cycle = false;
@@ -231,7 +246,7 @@ void Robot::RobotInit() {
       double pos = hopper_actuator_pot.Get();
 
       if (pos < offload_depth) {
-        hopper_actuator.Set(-0.5);
+        hopper_actuator.Set(-1.0);
       } else {
         hopper_actuator.Set(0.0);
         time_set = true;
@@ -269,7 +284,7 @@ void Robot::RobotInit() {
       double pos = hopper_actuator_pot.Get();
 
       if (pos > reg_traversal_depth) {
-        hopper_actuator.Set(0.5);
+        hopper_actuator.Set(1.0);
       } else {
         is_offload_pos = false;
         is_offload = false;
@@ -339,6 +354,8 @@ void Robot::AutonomousInit() {
   serial_enable = true;
   is_mining = false;
   is_offload = false;
+  finished_cycle = false;
+  time_set = false;
 }
 
 /**
@@ -356,6 +373,8 @@ void Robot::TeleopInit() {
   serial_enable = false;
   is_mining = false;
   is_offload = false;
+  finished_cycle = false;
+  time_set = false;
 }
 
 static constexpr long double PI = 3.14159265358979323846;
@@ -619,15 +638,7 @@ void Robot::TeleopControl() {
   }
 
   if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
-    StopMining();
-  }
-
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_Y)) {
     StartOffload();
-  }
-
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_X)) {
-    StopOffload();
   }
 
 }

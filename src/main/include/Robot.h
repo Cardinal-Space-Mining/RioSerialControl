@@ -87,20 +87,17 @@ class Robot : public frc::TimedRobot {
   // std::array<ctre::pheonix6::hardware::TalonFX, 1> mts = {
   //   TalonFX6(0),
   // }
-  ctre::phoenix6::hardware::TalonFX motors[MOTOR_COUNT] = {
-    ctre::phoenix6::hardware::TalonFX(0),
-    ctre::phoenix6::hardware::TalonFX(1),
-    ctre::phoenix6::hardware::TalonFX(2),
-    ctre::phoenix6::hardware::TalonFX(3),
-    ctre::phoenix6::hardware::TalonFX(4),
-  };
-
   // Consts for motors id's
   TalonFX6 track_right = 0;
   TalonFX6 track_left = 1;
   TalonFX6 trencher = 2;
   TalonFX6 hopper_belt = 3;
   TalonFX5 hopper_actuator = 4;
+
+  ctre::phoenix6::hardware::TalonFX* motors[2] = {
+    &track_right,
+    &track_left,
+  };
 
   // Actuator Potentiometer
   double offload_depth = .95;
