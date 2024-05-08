@@ -114,69 +114,30 @@ void Robot::RobotInit() {
 
   // runs every 1 millisec
   // this is what is actually reading input
-  AddPeriodic([&] {
-    if (serial_enable)
-    {
-      if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x13) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
-      {
-        serial.Write(xon, 1); // response to being on
-        if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
-        {
-          int function_number = *reinterpret_cast<int*>(input_buffer);
-          uint8_t result;
-          switch (function_number) // choosing what to do based on opcode
-          {
-            case 0: //spinning up motor with params id and output
-            {
-              serial.Read(input_buffer, 12); // could be different based on opcode
 
-              int motor_number = *reinterpret_cast<int*>(input_buffer);
-              double output_value = *reinterpret_cast<double*>(input_buffer + 4);
-              (*motors[motor_number]).Set(output_value);
-              break;
-            }
-            case 1: // start autonomous mining
-              StartMining();
-              break;
-            case 2: // stop autonomous mining
-              StopMining();
-              break;
-            case 3: // start autonomous offload
-              StartOffload();
-              break;
-            case 4: // stop autonomous offload
-              StopOffload();
-              break;
-          }
-          // serial.Write(result, 1);
-          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
-        }
-      }
-    }
-  }, 1_ms);
 
-  // start mining lower actuators
   AddPeriodic([&] {
+    // start mining lower actuators
     if (is_mining && !time_set) {
 
       double pos = hopper_actuator_pot.Get();
 
       if (pos > mining_depth) {
-        hopper_actuator.Set(0.5);
+        hopper_actuator.Set(0.75);
       } else {
         hopper_actuator.Set(0.0);
         time_set = true;
-        start_time = std::chrono::system_clock::now();
+        start_time = std::chrono::system_clock::now();  
+        if (serial_enable) {
+          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+        }
       }
     }
-  }, 1_ms);
 
-  // keep track of mining time, has reached run time?
-  bool on_off = false;
-  AddPeriodic([&] {
-    if (is_mining && time_set && !finished_cycle && !serial_enable) {
+    // keep track of mining time, has reached run time?
+    if (is_mining && time_set && !finished_cycle) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
-      if (duration.count() > mining_run_time) {
+      if (duration.count() > mining_run_time && !serial_enable) {
         StopMining();
       }
 
@@ -185,24 +146,10 @@ void Robot::RobotInit() {
         ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
         track_left.SetControl(drivetrain_velo);
         track_right.SetControl(drivetrain_velo);
-
-        if (!on_off) {
-          ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
-          hopper_belt.SetControl(hopper_belt_velo);
-
-          on_off = !on_off;
-        } else {
-          hopper_belt.Set(0);
-          on_off = !on_off;
-        }
-
-        
       }
     }
-  }, 100_ms);
 
-  // raise hopper from mining position
-  AddPeriodic([&] {
+    // raise hopper from mining position
     if (finished_cycle && is_mining) {
       
       double pos = hopper_actuator_pot.Get();
@@ -211,18 +158,36 @@ void Robot::RobotInit() {
       track_left.Set(0);
 
       if (pos < mining_to_offload_depth) {
-        hopper_actuator.Set(-1.0);
+        hopper_actuator.Set(-0.75);
       } else {
         is_mining = false;
         finished_cycle = false;
         DisableAllMotors();
-      }
+        if (serial_enable) {
+          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+        }
+      } 
     }
-  }, 1_ms);
+  }, 20_ms);
 
+  // AddPeriodic([&] {
+  //   if (is_mining && time_set && !finished_cycle) {
 
-  // move to offload position
+  //     if (on_off) {
+  //       cout << "starting hopper" << endl;
+  //       ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
+  //       hopper_belt.SetControl(hopper_belt_velo);
+  //       on_off = !on_off;
+  //     } else {
+  //       cout << "stopping hopper" << endl;
+  //       hopper_belt.Set(0);
+  //       on_off = !on_off;
+  //     }
+  // }
+  // }, 350_ms);
+  
   AddPeriodic([&] {
+    // move to offload position
     if (is_offload && !is_offload_pos) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_move_time_off);
 
@@ -236,10 +201,8 @@ void Robot::RobotInit() {
         track_right.SetControl(drivetrain_velo);
       }
     }
-  }, 10_ms);
 
-  // start offload raise actuators
-  AddPeriodic([&] {
+    // start offload raise actuators
     if (is_offload && is_offload_pos && !time_set) {
       double pos = hopper_actuator_pot.Get();
 
@@ -249,12 +212,12 @@ void Robot::RobotInit() {
         hopper_actuator.Set(0.0);
         time_set = true;
         start_time = std::chrono::system_clock::now();
+        ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_VELO; 
+        hopper_belt.SetControl(hopper_belt_velo); 
       }
     }
-  }, 1_ms);
 
-  // keep track of offload time, has reached run time?
-  AddPeriodic([&] {
+    // keep track of offload time, has reached run time?
     if (is_offload && time_set && !finished_cycle) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
       if (duration.count() > offload_run_time) {
@@ -262,21 +225,9 @@ void Robot::RobotInit() {
         time_set = false;
         StopOffload();
       }
-
-      if (time_set) {
-        // move motors here
-        // hopper belt
-        ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_VELO; 
-        hopper_belt.SetControl(hopper_belt_velo); 
-
-        track_left.Set(.025);
-        track_right.Set(.025);
-      }
     }
-  }, 100_ms);
 
-  // lower hopper from offload postition
-  AddPeriodic([&] {
+    // lower hopper from offload postition
     if (is_offload && finished_cycle) {
 
       double pos = hopper_actuator_pot.Get();
@@ -287,15 +238,14 @@ void Robot::RobotInit() {
         is_offload_pos = false;
         is_offload = false;
         finished_cycle = false;
+        time_set = false;
         DisableAllMotors();
+        if (serial_enable) {
+          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+        }
       }
     }
-  }, 1_ms);
-
-  // keep track of offload time, has reached run time?
-  // AddPeriodic([&] {
-  //   if (is_offload && !tim)
-  // }, 100_ms);
+  }, 20_ms);
 
   // AddPeriodic([&] {
   //   // TODO needs to be moved to mining algorithm bc its in while loop
@@ -360,7 +310,62 @@ void Robot::AutonomousInit() {
  * does nothing for now
  */
 void Robot::AutonomousPeriodic() {
-  // serial_enable = true;
+    AddPeriodic([&] {
+    if (serial_enable)
+    {
+      if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x13) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
+      {
+        serial.Write(xon, 1); // response to being on
+        if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
+        {
+          int function_number = *reinterpret_cast<int*>(input_buffer);
+          uint8_t result;
+          switch (function_number) // choosing what to do based on opcode
+          {
+            case 0: //spinning up motor with params id and output
+            {
+              serial.Read(input_buffer, 12); // could be different based on opcode
+
+              int motor_number = *reinterpret_cast<int*>(input_buffer);
+              double output_value = *reinterpret_cast<double*>(input_buffer + 4);
+              (*motors[motor_number]).Set(output_value);
+              break;
+            }
+            case 1: // start autonomous mining
+              StartMining();
+              break;
+            case 2: // stop autonomous mining
+              StopMining();
+              break;
+            case 3: // start autonomous offload
+              StartOffload();
+              break;
+            case 4: // stop autonomous offload
+              StopOffload();
+              break;
+          }
+          // serial.Write(result, 1);
+          // serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+        }
+      }
+    }
+  }, 1_ms);
+  
+  AddPeriodic([&] {
+    if (is_mining && time_set && !finished_cycle) {
+
+      if (on_off) {
+        cout << "starting hopper" << endl;
+        ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
+        hopper_belt.SetControl(hopper_belt_velo);
+        on_off = !on_off;
+      } else {
+        cout << "stopping hopper" << endl;
+        hopper_belt.Set(0);
+        on_off = !on_off;
+      }
+  }
+  }, 350_ms);
 }
 
 /**
@@ -653,6 +658,21 @@ void Robot::TeleopPeriodic() {
   {
     return;
   }
+
+  AddPeriodic([&] {
+    cout << "attempting this" << endl;
+    if (is_mining && time_set && !finished_cycle) {
+
+      if (on_off) {
+        ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
+        hopper_belt.SetControl(hopper_belt_velo);
+        on_off = !on_off;
+      } else {
+        hopper_belt.Set(0);
+        on_off = !on_off;
+      }
+  }
+  }, 450_ms);
   
   this->DriveTrainControl();
   this->HopperControl();
