@@ -174,12 +174,10 @@ void Robot::RobotInit() {
   // keep track of mining time, has reached run time?
   bool on_off = false;
   AddPeriodic([&] {
-    if (is_mining && time_set && !finished_cycle) {
+    if (is_mining && time_set && !finished_cycle && !serial_enable) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
       if (duration.count() > mining_run_time) {
         StopMining();
-        ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false};
-        trencher.SetControl(trencher_velo);
       }
 
       if (time_set) {
@@ -473,6 +471,9 @@ uint8_t Robot::StopMining() {
   if (is_mining && !is_offload) {
 
     DisableAllMotors();
+
+    ctre::phoenix6::controls::VelocityVoltage trencher_velo {TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false};
+    trencher.SetControl(trencher_velo);
 
     finished_cycle = true;
 
