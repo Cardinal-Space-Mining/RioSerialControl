@@ -660,7 +660,6 @@ void Robot::TeleopPeriodic() {
   }
 
   AddPeriodic([&] {
-    cout << "attempting this" << endl;
     if (is_mining && time_set && !finished_cycle) {
 
       if (on_off) {
@@ -672,7 +671,7 @@ void Robot::TeleopPeriodic() {
         on_off = !on_off;
       }
   }
-  }, 450_ms);
+  }, 1000_ms);
   
   this->DriveTrainControl();
   this->HopperControl();
