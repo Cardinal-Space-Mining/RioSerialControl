@@ -190,12 +190,19 @@ void Robot::RobotInit() {
     // move to offload position
     if (is_offload && !is_offload_pos) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_move_time_off);
-
-      if (duration.count() > offload_move_time) {
+      if ((serial_enable && duration.count() > offload_move_time_automatic) || 
+      (!serial_enable && duration.count() > offload_move_time_teleop)) 
+      {
         is_offload_pos = true;
         track_left.Set(0);
         track_right.Set(0);
-      } else {
+      }
+      // if (duration.count() > offload_move_time_teleop) {
+      //   is_offload_pos = true;
+      //   track_left.Set(0);
+      //   track_right.Set(0);
+      // } 
+        else {
         ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MAX_VELO * -0.25, 1_tr_per_s_sq, false, 0_V, 0, false};
         track_left.SetControl(drivetrain_velo);
         track_right.SetControl(drivetrain_velo);

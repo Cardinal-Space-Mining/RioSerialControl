@@ -127,7 +127,8 @@ class Robot : public frc::TimedRobot {
   // constant for how long each offload run is in time (seconds)
   bool is_offload_pos = false;
   std::chrono::system_clock::time_point start_move_time_off;
-  static constexpr auto offload_move_time = 3;
+  static constexpr auto offload_move_time_teleop = 3;
+  static constexpr auto offload_move_time_automatic = 1;
   static constexpr auto offload_run_time = 10;
 
   // constants for timing of hopper movement during mining
