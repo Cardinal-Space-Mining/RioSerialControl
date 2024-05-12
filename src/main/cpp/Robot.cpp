@@ -54,8 +54,8 @@ void Robot::ConfigTracks()
   configs.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
   configs.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
 
-  configs.CurrentLimits.StatorCurrentLimitEnable = true;
-  configs.CurrentLimits.StatorCurrentLimit = 40; // Set max current in stator to 40A
+  configs.CurrentLimits.StatorCurrentLimitEnable = false;
+  //configs.CurrentLimits.StatorCurrentLimit = 40; // Set max current in stator to 40A
 
   track_left.GetConfigurator().Apply(configs);
   track_right.GetConfigurator().Apply(configs);
@@ -143,7 +143,7 @@ void Robot::HopperControl()
   hopper_belt.SetControl(belt_velo);
 
   // Control Hopper Actuator
-  double actuator_power = std::max(-logitech.GetRawAxis(LogitechConstants::RIGHT_JOY_Y), -0.1);
+  double actuator_power = -logitech.GetRawAxis(LogitechConstants::RIGHT_JOY_Y);
   hopper_actuator.Set(-actuator_power);
 }
 
@@ -175,7 +175,7 @@ void Robot::DriveTrainControl()
 
   if (logitech.GetRawButton(LogitechConstants::BUTTON_B))
   {
-    drive_power_scale_factor = 0.3;
+    drive_power_scale_factor = 0.15;
   }
 
   auto r_velo = drive_power_scale_factor * TRACKS_MAX_VELO * magnitude * std::cos(theta + (PI / 4));

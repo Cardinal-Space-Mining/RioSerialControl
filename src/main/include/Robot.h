@@ -78,7 +78,7 @@ private:
 
   double drive_power_scale_factor = .7;
 
-  static constexpr auto TRENCHER_MAX_VELO = 50_tps;
-  static constexpr auto HOPPER_BELT_MAX_VELO = 60_tps;
+  static constexpr auto TRENCHER_MAX_VELO = 80_tps;
+  static constexpr auto HOPPER_BELT_MAX_VELO = 30_tps;
   static constexpr auto TRACKS_MAX_VELO = 125_tps;
 };
