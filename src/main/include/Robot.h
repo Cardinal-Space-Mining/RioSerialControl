@@ -66,7 +66,7 @@ protected:
 
 	void TeleopControl();
 
-	void ConfigTracks();
+	void ConfigMotors();
 
 protected:
 	void periodic_handle_serial_control();

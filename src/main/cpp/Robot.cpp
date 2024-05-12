@@ -35,22 +35,22 @@ namespace util {
 	 * @param b
 	 * @return */
 	char* itoa(int i, char b[]) {
-		char const digit[] = "0123456789";
-		char* p = b;
-		if(i<0){
-			*p++ = '-';
-			i *= -1;
-		}
-		int shifter = i;
-		do { //Move to where representation ends
-			++p;
-			shifter = shifter/10;
-		} while(shifter);
-		*p = '\0';
-		do { //Move back, inserting digits as u go
-			*--p = digit[i%10];
-			i = i/10;
-		} while(i);
+	char const digit[] = "0123456789";
+	char* p = b;
+	if(i<0){
+		*p++ = '-';
+		i *= -1;
+	}
+	int shifter = i;
+	do { //Move to where representation ends
+		++p;
+		shifter = shifter/10;
+	} while(shifter);
+	*p = '\0';
+	do { //Move back, inserting digits as u go
+		*--p = digit[i%10];
+		i = i/10;
+	} while(i);
 		return b;
 	}
 
@@ -69,20 +69,24 @@ void Robot::DisableAllMotors()
 	hopper_actuator.Set(0);
 }
 
-void Robot::ConfigTracks()
+void Robot::ConfigMotors()
 {
-	configs::TalonFXConfiguration configs{};
+	configs::TalonFXConfiguration generic_config, tracks_config{};
 
 	/* Voltage-based velocity requires a feed forward to account for the back-emf of the motor */
-	configs.Slot0.kP = 0.11;   // An error of 1 rotation per second results in 2V output
-	configs.Slot0.kI = 0.5;    // An error of 1 rotation per second increases output by 0.5V every second
-	configs.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
-	configs.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
+	tracks_config.Slot0.kP = 0.11;   // An error of 1 rotation per second results in 2V output
+	tracks_config.Slot0.kI = 0.5;    // An error of 1 rotation per second increases output by 0.5V every second
+	tracks_config.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
+	tracks_config.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
 
-	configs.CurrentLimits.StatorCurrentLimitEnable = false;
+	tracks_config.CurrentLimits.StatorCurrentLimitEnable = false;
+	generic_config.CurrentLimits.StatorCurrentLimitEnable = false;
 
-	track_left.GetConfigurator().Apply(configs);
-	track_right.GetConfigurator().Apply(configs);
+	track_left.GetConfigurator().Apply(tracks_config);
+	track_right.GetConfigurator().Apply(tracks_config);
+
+	hopper_belt.GetConfigurator().Apply(generic_config);
+	trencher.GetConfigurator().Apply(generic_config);
 }
 
 void Robot::periodic_handle_serial_control() {
@@ -130,36 +134,35 @@ void Robot::periodic_handle_serial_control() {
 void Robot::periodic_handle_mining() {
 
 	// start mining lower actuators
-    if (is_mining && !time_set) {
+	if (is_mining && !time_set) {
+		double pos = hopper_actuator_pot.Get();
 
-      double pos = hopper_actuator_pot.Get();
+		if (pos > mining_depth) {
+			hopper_actuator.Set(0.75);
+		} else {
+			hopper_actuator.Set(0.0);
+			time_set = true;
+			start_time = std::chrono::system_clock::now();  
+			if (serial_enable) {
+				serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+			}
+		}
+	}
 
-      if (pos > mining_depth) {
-        hopper_actuator.Set(0.75);
-      } else {
-        hopper_actuator.Set(0.0);
-        time_set = true;
-        start_time = std::chrono::system_clock::now();  
-        if (serial_enable) {
-          serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
-        }
-      }
-    }
+	// keep track of mining time, has reached run time?
+	if (is_mining && time_set && !finished_cycle) {
+		auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+		if (duration.count() > mining_run_time && !serial_enable) {
+			StopMining();
+		}
 
-    // keep track of mining time, has reached run time?
-    if (is_mining && time_set && !finished_cycle) {
-      auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
-      if (duration.count() > mining_run_time && !serial_enable) {
-        StopMining();
-      }
-
-      if (time_set) {
-        // drivetrain motion settings
-        ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
-        track_left.SetControl(drivetrain_velo);
-        track_right.SetControl(drivetrain_velo);
-      }
-    }
+		if (time_set) {
+			// drivetrain motion settings
+			ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
+			track_left.SetControl(drivetrain_velo);
+			track_right.SetControl(drivetrain_velo);
+		}
+	}
 
     // raise hopper from mining position
     if (finished_cycle && is_mining) {
