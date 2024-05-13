@@ -105,7 +105,8 @@ void Robot::InitSendable(wpi::SendableBuilder& builder) {
 	util::add_motor_dbg_info(builder, track_left, "TrackLeft");
 	util::add_motor_dbg_info(builder, trencher, "Trencher");
 	util::add_motor_dbg_info(builder, hopper_belt, "HopperBelt");
-	util::add_motor_dbg_info(builder, hopper_actuator, "HopperActuator");
+	// util::add_motor_dbg_info(builder, hopper_actuator, "HopperActuator");
+	// builder.AddDoubleProperty("HopperActuator/duty_cycle")	// TODO: add telemetry
 	this->state.InitSendable(builder);
 }
 
@@ -133,22 +134,24 @@ uint8_t Robot::get_moving_avg()
 // --------- Setup/Helpers ----------
 void Robot::configure_motors()
 {
-	configs::TalonFXConfiguration generic_config{}, tracks_config{};
+	configs::TalonFXConfiguration generic_config{}/*, tracks_config{}*/;
 
 	/* Voltage-based velocity requires a feed forward to account for the back-emf of the motor */
-	tracks_config.Slot0.kP = 0.11;   // An error of 1 rotation per second results in 2V output
-	tracks_config.Slot0.kI = 0.5;    // An error of 1 rotation per second increases output by 0.5V every second
-	tracks_config.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
-	tracks_config.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
+	generic_config.Slot0.kP = 0.11;   // An error of 1 rotation per second results in 2V output
+	generic_config.Slot0.kI = 0.5;    // An error of 1 rotation per second increases output by 0.5V every second
+	generic_config.Slot0.kD = 0.0001; // A change of 1 rotation per second squared results in 0.0001 volts output
+	generic_config.Slot0.kV = 0.12;   // Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
 
-	tracks_config.CurrentLimits.StatorCurrentLimitEnable = false;
+	// tracks_config.CurrentLimits.StatorCurrentLimitEnable = false;
 	generic_config.CurrentLimits.StatorCurrentLimitEnable = false;
 
-	track_left.GetConfigurator().Apply(tracks_config);
-	track_right.GetConfigurator().Apply(tracks_config);
+	track_left.GetConfigurator().Apply(generic_config);
+	track_right.GetConfigurator().Apply(generic_config);
 
 	hopper_belt.GetConfigurator().Apply(generic_config);
 	trencher.GetConfigurator().Apply(generic_config);
+
+	// TODO: disable hopper actuator current limit
 
 	trencher.SetInverted(true);
 	hopper_belt.SetInverted(false);
@@ -457,9 +460,8 @@ void Robot::periodic_handle_teleop_input()
 		double trencher_speed = logitech.GetRawAxis(Robot::TELEOP_TRENCHER_SPEED_AXIS_IDX);
 		if (logitech.GetRawButton(Robot::TELEOP_TRENCHER_INVERT_IDX)) trencher_speed *= -1.0;
 
-		ctre::phoenix6::controls::VelocityVoltage vel_command{ (Robot::TRENCHER_MAX_VELO * trencher_speed), 5_tr_per_s_sq, false, 0_V, 0, false };
-		
 		// set trencher velocity
+		ctre::phoenix6::controls::VelocityVoltage vel_command{ (Robot::TRENCHER_MAX_VELO * trencher_speed), 5_tr_per_s_sq, false, 0_V, 0, false };
 		trencher.SetControl(vel_command);
 	}
 	// -------- HOPPER CONTROL -------------
@@ -467,9 +469,8 @@ void Robot::periodic_handle_teleop_input()
 		double hopper_belt_speed = -logitech.GetRawAxis(Robot::TELEOP_HOPPER_SPEED_AXIS_IDX);
 		if (logitech.GetRawButton(Robot::TELEOP_HOPPER_INVERT_IDX)) hopper_belt_speed *= -1.0;
 
-		ctre::phoenix6::controls::VelocityVoltage belt_velo{ (HOPPER_BELT_MAX_VELO * hopper_belt_speed), 5_tr_per_s_sq, false, 0_V, 0, false };
-		
 		// set hopper belt
+		ctre::phoenix6::controls::VelocityVoltage belt_velo{ (HOPPER_BELT_MAX_VELO * hopper_belt_speed), 5_tr_per_s_sq, false, 0_V, 0, false };
 		hopper_belt.SetControl(belt_velo);
 
 		// set actutor power
@@ -478,7 +479,7 @@ void Robot::periodic_handle_teleop_input()
 		);
 	}
 	// ---------- TELEAUTO CONTROl ----------
-	{	// TODO: constants for bindings
+	{
 		if(logitech.GetPOV(0) == Robot::TELEAUTO_MINING_INIT_POV) {		// dpad top
 			this->mining_init();
 		}

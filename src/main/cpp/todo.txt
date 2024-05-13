@@ -1,0 +1,7 @@
+mining stop --> teleop
+test speed modes
+fix hopper, trencher control
+offline logging
+configure hopper actuator
+hopper actuator telemetry
+hopper increment for teleauto mining

@@ -124,7 +124,8 @@ private:
 		track_right{ 0 },
 		track_left{ 1 },
 		trencher{ 2 },
-		hopper_belt{ 3 },
+		hopper_belt{ 3 };
+	TalonFX5
 		hopper_actuator{ 4 };
 
 	TalonFX6* motors[2] = {
