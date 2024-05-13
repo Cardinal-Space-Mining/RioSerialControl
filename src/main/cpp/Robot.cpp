@@ -84,6 +84,10 @@ void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 	builder.AddBooleanProperty("offload_traversal_reached", [this](){return this->offload_traversal_reached;}, nullptr);
 	builder.AddBooleanProperty("mining_lowered_hopper", [this](){return this->mining_lowered_hopper;}, nullptr);
 	builder.AddDoubleProperty("driving_speed_scalar", [this](){return this->driving_speed_scalar;}, nullptr);
+
+	builder.AddDoubleProperty("tuning/mining_runtime", [this](){return this->teleauto_mining_runtime;}, [this](double v){this->teleauto_mining_runtime = v;});
+	builder.AddDoubleProperty("tuning/offload_backup_time", [this](){return this->teleauto_offload_backup_time;}, [this](double v){this->teleauto_offload_backup_time = v;});
+	builder.AddDoubleProperty("tuning/offload_dump_time", [this](){return this->teleauto_offload_dump_time;}, [this](double v){this->teleauto_offload_dump_time = v;});
 };
 
 
@@ -92,7 +96,7 @@ Robot::Robot() /*: telemetry_sender{ "Robot" }*/ {}
 Robot::~Robot() {}
 
 
-// TELEMETRY
+// ------------ TELEMETRY ---------------
 void Robot::InitSendable(wpi::SendableBuilder& builder)
 {
 	util::add_fx6_dbg_info(builder, track_right, "TrackRight");
@@ -166,9 +170,8 @@ void Robot::mining_shutdown()
 		//ctre::phoenix6::controls::VelocityVoltage trencher_velo{ 0_tps, 5_tr_per_s_sq, false, 0_V, 0, false };
 		//trencher.SetControl(trencher_velo);
 
-		this->state.teleauto_operation_complete = true;
 		this->state.mining_enabled = false;
-
+		this->state.teleauto_operation_complete = false;
 		this->disable_motors();
 	}
 
@@ -202,52 +205,49 @@ void Robot::offload_shutdown()
 
 void Robot::periodic_handle_mining()
 {
-	// start mining lower actuators
-	if(this->state.mining_enabled && !this->state.mining_lowered_hopper)
-	{
-		double pos = hopper_actuator_pot.Get();
+	if(this->state.mining_enabled) {
+		// start mining lower actuators
+		if(!this->state.mining_lowered_hopper)
+		{
+			double pos = hopper_actuator_pot.Get();
 
-		if(pos > Robot::MINING_POT_VALUE) {
-			hopper_actuator.Set(Robot::MINING_HOPPER_MOVE_PERCENT);
-		} else {
-			hopper_actuator.Set(0.0);
-			this->state.mining_lowered_hopper = true;
-			this->state.auto_operation_start_time = std::chrono::system_clock::now();  
+			if(pos > Robot::MINING_POT_VALUE) {
+				hopper_actuator.Set(Robot::MINING_HOPPER_MOVE_PERCENT);
+			} else {
+				hopper_actuator.Set(0.0);
+				this->state.mining_lowered_hopper = true;
+				this->state.auto_operation_start_time = std::chrono::system_clock::now();  
+			}
+		}
+
+		// keep track of mining time, has reached run time?
+		if(this->state.mining_lowered_hopper && !this->state.teleauto_operation_complete)
+		{
+			auto duration = std::chrono::duration<double>{ std::chrono::system_clock::now() - this->state.auto_operation_start_time };
+			if(duration.count() > this->state.teleauto_mining_runtime) {
+				this->state.teleauto_operation_complete = true;
+			}
+
+			if(this->state.mining_lowered_hopper) {
+				// drivetrain motion settings
+				ctre::phoenix6::controls::VelocityVoltage drivetrain_velo{ Robot::TRACKS_MINING_VELO, 1_tr_per_s_sq, false, 0_V, 0, false };
+				track_left.SetControl(drivetrain_velo);
+				track_right.SetControl(drivetrain_velo);
+			}
+		}
+
+		// raise hopper from mining position
+		if(this->state.teleauto_operation_complete)
+		{
+			double pos = hopper_actuator_pot.Get();
+
+			track_right.Set(0);
+			track_left.Set(0);
+
+			if(pos < Robot::AUTO_TRANSPORT_POT_VALUE) hopper_actuator.Set(-Robot::MINING_HOPPER_MOVE_PERCENT);
+			else  this->mining_shutdown();
 		}
 	}
-
-	// keep track of mining time, has reached run time?
-	if(this->state.mining_enabled && this->state.mining_lowered_hopper && !this->state.teleauto_operation_complete)
-	{
-		auto duration = std::chrono::duration<double>{ std::chrono::system_clock::now() - this->state.auto_operation_start_time };
-		if(duration.count() > Robot::MINING_RUN_TIME_SECONDS) {
-			this->mining_shutdown();
-		}
-
-		if(this->state.mining_lowered_hopper) {
-			// drivetrain motion settings
-			ctre::phoenix6::controls::VelocityVoltage drivetrain_velo{ Robot::TRACKS_MINING_VELO, 1_tr_per_s_sq, false, 0_V, 0, false };
-			track_left.SetControl(drivetrain_velo);
-			track_right.SetControl(drivetrain_velo);
-		}
-	}
-
-	// raise hopper from mining position
-	if(this->state.teleauto_operation_complete && this->state.mining_enabled)
-	{
-		double pos = hopper_actuator_pot.Get();
-
-		track_right.Set(0);
-		track_left.Set(0);
-
-		if (pos < Robot::AUTO_TRANSPORT_POT_VALUE) {
-			hopper_actuator.Set(-Robot::MINING_HOPPER_MOVE_PERCENT);
-		} else {
-			this->state.mining_enabled = false;
-			this->state.teleauto_operation_complete = false;
-			this->disable_motors();
-		} 
-    }
 }
 
 void Robot::periodic_handle_offload()
@@ -257,13 +257,13 @@ void Robot::periodic_handle_offload()
 	{
 		auto duration = std::chrono::duration<double>{ std::chrono::system_clock::now() - this->state.offload_traversal_start_time };
 		if ((/*this->state.serial_enabled && duration.count() > Robot::AUTO_OFFLOAD_BACKUP_TIME_SECONDS) || 
-			(!this->state.serial_enabled &&*/ duration.count() > Robot::TELE_OFFLOAD_BACKUP_TIME_SECONDS))
+			(!this->state.serial_enabled &&*/ duration.count() > this->state.teleauto_offload_backup_time))
 		{
 			this->state.offload_traversal_reached = true;
 			track_left.Set(0);
 			track_right.Set(0);
 		}
-		// if (duration.count() > TELE_OFFLOAD_BACKUP_TIME_SECONDS) {
+		// if (duration.count() > this->state.teleauto_offload_backup_time) {
 		//   this->state.offload_traversal_reached = true;
 		//   track_left.Set(0);
 		//   track_right.Set(0);
@@ -297,7 +297,7 @@ void Robot::periodic_handle_offload()
 	// keep track of offload time, has reached run time?
 	if(this->state.offload_enabled && this->state.mining_lowered_hopper && !this->state.teleauto_operation_complete) {
 		auto duration = std::chrono::duration<double>{ std::chrono::system_clock::now() - this->state.auto_operation_start_time };
-		if (duration.count() > Robot::OFFLOAD_TOTAL_RUN_TIME) {
+		if (duration.count() > this->state.teleauto_offload_dump_time) {
 			hopper_actuator.Set(0);
 			this->state.mining_lowered_hopper = false;
 			this->offload_shutdown();

@@ -84,7 +84,10 @@ private:
 			mining_lowered_hopper = false;
 
 		double
-			driving_speed_scalar = Robot::DRIVING_MEDIUM_SPEED_SCALAR;
+			driving_speed_scalar = Robot::DRIVING_MEDIUM_SPEED_SCALAR,
+			teleauto_mining_runtime = Robot::MINING_RUN_TIME_SECONDS,
+			teleauto_offload_backup_time = Robot::TELE_OFFLOAD_BACKUP_TIME_SECONDS,
+			teleauto_offload_dump_time = Robot::OFFLOAD_DUMP_TIME;
 
 		std::chrono::system_clock::time_point
 			auto_operation_start_time,
@@ -120,7 +123,7 @@ private:
 	// motor physical speed targets
 		TRENCHER_MAX_VELO = 80_tps,
 		TRENCHER_MINING_VELO = 80_tps,
-		HOPPER_BELT_MAX_VELO = 30_tps,
+		HOPPER_BELT_MAX_VELO = 45_tps,
 		HOPPER_BELT_MAX_MINING_VELO = 10_tps,
 		TRACKS_MAX_VELO = 125_tps,
 		TRACKS_MINING_VELO = 8_tps,
@@ -148,7 +151,7 @@ private:
 		MINING_RUN_TIME_SECONDS = 10.0,           // teleauto mining run time
 		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 1.5,   // teleauto offload duration
 		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 1.0,
-		OFFLOAD_TOTAL_RUN_TIME = 5.0;
+		OFFLOAD_DUMP_TIME = 6.0;
 
 	// // constants for timing of hopper movement during mining
 	// static constexpr int
