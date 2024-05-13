@@ -33,8 +33,6 @@ using namespace ctre::phoenix6;
 typedef ctre::phoenix6::hardware::TalonFX TalonFX6;
 typedef WPI_TalonFX TalonFX5;
 
-#define MOTOR_COUNT 5
-
 class Robot : public frc::TimedRobot, public wpi::Sendable {
 public:
 	Robot();
@@ -78,10 +76,9 @@ private:
 	class State : public wpi::Sendable{
 	public:
 		bool
-			serial_enabled = false,
 			mining_enabled = false,
 			offload_enabled = false,
-			mining_complete = false,
+			teleauto_operation_complete = false,
 			hopper_enabled = false,
 			offload_traversal_reached = false,
 			mining_lowered_hopper = false;
@@ -92,6 +89,8 @@ private:
 		std::chrono::system_clock::time_point
 			auto_operation_start_time,
 			offload_traversal_start_time;
+
+		void reset();
 
 		void InitSendable(wpi::SendableBuilder& builder) override;
 
@@ -120,10 +119,12 @@ private:
 	static constexpr auto
 	// motor physical speed targets
 		TRENCHER_MAX_VELO = 80_tps,
+		TRENCHER_MINING_VELO = 80_tps,
 		HOPPER_BELT_MAX_VELO = 30_tps,
 		HOPPER_BELT_MAX_MINING_VELO = 10_tps,
 		TRACKS_MAX_VELO = 125_tps,
-		TRACKS_MINING_MAX_VELO = 8_tps;
+		TRACKS_MINING_VELO = 8_tps,
+		TRACKS_OFFLOAD_VELO = TRACKS_MAX_VELO * 0.25;
 
 	static constexpr double
 	// driving
@@ -137,38 +138,43 @@ private:
 		OFFLOAD_POT_VALUE = 0.95,
 		TRAVERSAL_POT_VALUE = 0.5,
 		AUTO_TRANSPORT_POT_VALUE = 0.45,
-		MINING_POT_VALUE = 0.03;
+		MINING_POT_VALUE = 0.03,
+	// component speeds during operation
+		MINING_HOPPER_MOVE_PERCENT = 0.75,
+		OFFLOAD_HOPPER_MOVE_PERCENT = 1.0;
 
-	static constexpr int
+	static constexpr double
 	// timed operations
-		MINING_RUN_TIME_SECONDS = 10,           // teleauto mining run time
-		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3,   // teleauto offload duration
-		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 1,
-		OFFLOAD_TOTAL_RUN_TIME = 10;
+		MINING_RUN_TIME_SECONDS = 10.0,           // teleauto mining run time
+		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 1.5,   // teleauto offload duration
+		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 1.0,
+		OFFLOAD_TOTAL_RUN_TIME = 5.0;
 
-	// constants for timing of hopper movement during mining
-	static constexpr int
-		hopper_belt_mine_wait_time = 750,	// in milliseconds
-		hopper_belt_mine_run_time = 100;	// in milliseconds
+	// // constants for timing of hopper movement during mining
+	// static constexpr int
+	// 	hopper_belt_mine_wait_time = 750,	// in milliseconds
+	// 	hopper_belt_mine_run_time = 100;	// in milliseconds
 
 	static constexpr int
+		DISABLE_ALL_ACTIONS_BUTTON_IDX = LogitechConstants::BUTTON_A,
+
 		TELEOP_LOW_SPEED_BUTTON_IDX = LogitechConstants::BUTTON_B,
 		TELEOP_MEDIUM_SPEED_BUTTON_IDX = LogitechConstants::BUTTON_Y,
 		TELEOP_HIGH_SPEED_BUTTON_IDX = LogitechConstants::BUTTON_X,
-		
+
 		TELEOP_DRIVE_X_AXIS_IDX = LogitechConstants::LEFT_JOY_X,
 		TELEOP_DRIVE_Y_AXIS_IDX = LogitechConstants::LEFT_JOY_Y,
 
 		TELEOP_TRENCHER_SPEED_AXIS_IDX = LogitechConstants::RIGHT_TRIGGER,
-		TELEOP_TRENCHER_INVERT_IDX = LogitechConstants::RB,
-		
+		TELEOP_TRENCHER_INVERT_BUTTON_IDX = LogitechConstants::RB,
+
 		TELEOP_HOPPER_SPEED_AXIS_IDX = LogitechConstants::LEFT_TRIGGER,
-		TELEOP_HOPPER_INVERT_IDX = LogitechConstants::LB,
+		TELEOP_HOPPER_INVERT_BUTTON_IDX = LogitechConstants::LB,
 		TELEOP_HOPPER_ACTUATE_AXIS_IDX = LogitechConstants::RIGHT_JOY_Y,
 
-		TELEAUTO_MINING_INIT_POV = 0,
-		TELEAUTO_MINING_STOP_POV = 90,
-		TELEAUTO_OFFLOAD_INIT_POV = 180,
-		TELEAUTO_OFFLOAD_STOP_POV = 270;
+		TELEAUTO_MINING_INIT_POV = 0, /*Mining Init Is Up*/
+		TELEAUTO_MINING_STOP_POV = 180, /*Mining Stop Is Down*/
+		TELEAUTO_OFFLOAD_INIT_POV = 90,  /*Offload Init Is Right*/
+		TELEAUTO_OFFLOAD_STOP_POV = 270;  /*Offload Stop Is Left*/
 
 };
