@@ -112,7 +112,7 @@ class Robot : public frc::TimedRobot {
   double drive_power_scale_factor = .7;
 
   static constexpr auto TRENCHER_MAX_VELO = 40_tps;
-  static constexpr auto HOPPER_BELT_MAX_VELO = 30_tps;
+  static constexpr auto HOPPER_BELT_MAX_VELO = 40_tps;
   static constexpr auto HOPPER_BELT_MAX_MINING_VELO = 10_tps;
   static constexpr auto TRACKS_MAX_VELO = 125_tps;
   static constexpr auto TRACKS_MINING_MAX_VELO = 8_tps;

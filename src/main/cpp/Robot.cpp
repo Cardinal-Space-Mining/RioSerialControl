@@ -118,12 +118,14 @@ void Robot::RobotInit() {
 
   AddPeriodic([&] {
     // start mining, lower actuators
+
     if (is_mining && !time_set) {
 
       double pos = hopper_actuator_pot.Get();
 
       if (pos > mining_depth) {
         hopper_actuator.Set(0.75);
+        // cout << pos << endl;
       } else {
         hopper_actuator.Set(0.0);
         time_set = true;
@@ -137,6 +139,7 @@ void Robot::RobotInit() {
     // keep track of mining time, has reached run time?
     if (is_mining && time_set && !finished_cycle) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
+      cout << duration.count() << endl;
       // TODO serial_enable instead of !serial_enable?
       if ((duration.count() > mining_run_time) && !serial_enable) {
         StopMining();
@@ -213,14 +216,16 @@ void Robot::RobotInit() {
     if (is_offload && is_offload_pos && !time_set) {
       double pos = hopper_actuator_pot.Get();
 
+      cout << pos << endl;
       if (pos < offload_depth) {
         hopper_actuator.Set(-1.0);
       } else {
         hopper_actuator.Set(0.0);
         time_set = true;
         start_time = std::chrono::system_clock::now();
-        ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = -1.0 * HOPPER_BELT_MAX_VELO; 
+        ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_VELO * -1.0, 5_tr_per_s_sq, false, 0_V, 0, false};
         hopper_belt.SetControl(hopper_belt_velo); 
+        cout << hopper_belt.GetVelocity() << endl;
       }
     }
 
@@ -334,36 +339,23 @@ void Robot::RobotInit() {
       }
     }
   }, 1_ms);
-  
-  AddPeriodic([&] {
-    if (is_mining && time_set && !finished_cycle) {
-
-      if (on_off) {
-        cout << "starting hopper" << endl;
-        ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
-        hopper_belt.SetControl(hopper_belt_velo);
-        on_off = !on_off;
-      } else {
-        cout << "stopping hopper" << endl;
-        hopper_belt.Set(0);
-        on_off = !on_off;
-      }
-  }
-  }, 350_ms);
 
   AddPeriodic([&] {
-    if (is_mining && time_set && !finished_cycle) {
-
-      if (on_off) {
-        ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
-        hopper_belt.SetControl(hopper_belt_velo);
-        on_off = !on_off;
-      } else {
-        hopper_belt.Set(0);
-        on_off = !on_off;
-      }
-  }
-  }, 1000_ms);
+    if(logitech.GetPOV(0) == 90){
+      StopMining();
+    }
+    if(logitech.GetPOV(0) == 270){
+      StopOffload();
+    }
+    if(logitech.GetRawButtonPressed(LogitechConstants::BUTTON_A)){
+      DisableAllMotors();
+      is_offload_pos = false;
+      is_offload = false;
+      is_mining = false;
+      finished_cycle = false;
+      time_set = false;
+    }
+  }, 20_ms);
 
 }
 
@@ -630,7 +622,7 @@ uint8_t Robot::StartOffload() {
 
 uint8_t Robot::StopOffload() {
 
-  if ((is_offload && !is_mining) || true) {
+  if ((is_offload && !is_mining)) {
 
     DisableAllMotors();
 
@@ -717,11 +709,12 @@ void Robot::DriveTrainControl()
 
 void Robot::TeleopControl() {
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_A)) {
+  if (logitech.GetPOV(0) == 0) {
     StartMining();
   }
 
-  if (logitech.GetRawButton(LogitechConstants::BUTTON_B)) {
+
+  if (logitech.GetPOV(0) == 180) {
     StartOffload();
   }
 
