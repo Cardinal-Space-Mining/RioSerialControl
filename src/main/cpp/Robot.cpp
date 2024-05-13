@@ -11,6 +11,8 @@
 #include <frc/drive/DifferentialDrive.h>
 // #include <frc/AnalogInput.h>
 #include <frc/smartdashboard/SmartDashboard.h>
+#include <frc/DataLogManager.h>
+#include <frc/DriverStation.h>
 
 #include <chrono>
 #include <iostream>
@@ -70,13 +72,21 @@ namespace util {
 		};
 	}
 
-	void add_motor_dbg_info(wpi::SendableBuilder& builder, TalonFX6& motor, std::string prefix)
+	void add_fx6_dbg_info(wpi::SendableBuilder& builder, TalonFX6& motor, std::string prefix)
 	{
 		builder.AddDoubleProperty(prefix + "/duty_cycle", [&] { return motor.Get(); }, nullptr);
 		builder.AddDoubleProperty(prefix + "/voltage", [&] { return motor.GetMotorVoltage().GetValue().value(); }, nullptr);
 		builder.AddDoubleProperty(prefix + "/position", [&] { return motor.GetPosition().GetValue().value(); }, nullptr);
 		builder.AddDoubleProperty(prefix + "/current", [&] { return motor.GetStatorCurrent().GetValue().value(); }, nullptr);
 		builder.AddDoubleProperty(prefix + "/temp", [&] { return motor.GetDeviceTemp().GetValue().value(); }, nullptr);
+	}
+	void add_fx5_dbg_info(wpi::SendableBuilder& builder, TalonFX5& motor, std::string prefix)
+	{
+		builder.AddDoubleProperty(prefix + "/duty_cycle", [&] { return motor.Get(); }, nullptr);
+		builder.AddDoubleProperty(prefix + "/voltage", [&] { return motor.GetMotorOutputVoltage(); }, nullptr);
+		builder.AddDoubleProperty(prefix + "/position", [&] { return motor.GetSelectedSensorPosition(0 /*Primary Closed Loop*/); }, nullptr);
+		builder.AddDoubleProperty(prefix + "/current", [&] { return motor.GetStatorCurrent(); }, nullptr);
+		builder.AddDoubleProperty(prefix + "/temp", [&] { return motor.GetTemperature(); }, nullptr);
 	}
 
 }
@@ -89,24 +99,24 @@ void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 	builder.AddBooleanProperty("mining_complete", [this](){return this->mining_complete;}, nullptr);
 	builder.AddBooleanProperty("hopper_enabled", [this](){return this->hopper_enabled;}, nullptr);
 	builder.AddBooleanProperty("offload_traversal_reached", [this](){return this->offload_traversal_reached;}, nullptr);
-	builder.AddBooleanProperty("mining_started_trencher", [this](){return this->mining_started_trencher;}, nullptr);
+	builder.AddBooleanProperty("mining_lowered_hopper", [this](){return this->mining_lowered_hopper;}, nullptr);
 	builder.AddDoubleProperty("driving_speed_scalar", [this](){return this->driving_speed_scalar;}, nullptr);
 };
 
 
 
-Robot::Robot() : telemetry_sender{ "Robot" } {}
+Robot::Robot() /*: telemetry_sender{ "Robot" }*/ {}
 Robot::~Robot() {}
 
 
 // TELEMETRY
-void Robot::InitSendable(wpi::SendableBuilder& builder) {
-	util::add_motor_dbg_info(builder, track_right, "TrackRight");
-	util::add_motor_dbg_info(builder, track_left, "TrackLeft");
-	util::add_motor_dbg_info(builder, trencher, "Trencher");
-	util::add_motor_dbg_info(builder, hopper_belt, "HopperBelt");
-	// util::add_motor_dbg_info(builder, hopper_actuator, "HopperActuator");
-	// builder.AddDoubleProperty("HopperActuator/duty_cycle")	// TODO: add telemetry
+void Robot::InitSendable(wpi::SendableBuilder& builder)
+{
+	util::add_fx6_dbg_info(builder, track_right, "TrackRight");
+	util::add_fx6_dbg_info(builder, track_left, "TrackLeft");
+	util::add_fx6_dbg_info(builder, trencher, "Trencher");
+	util::add_fx6_dbg_info(builder, hopper_belt, "HopperBelt");
+	util::add_fx5_dbg_info(builder, hopper_actuator, "HopperActuator");
 	this->state.InitSendable(builder);
 }
 
@@ -170,12 +180,12 @@ void Robot::disable_motors()
 
 
 // ------------- Mining/Offload init and shutdown --------------
-uint8_t Robot::mining_init()
+void Robot::mining_init()
 {
 	if(!this->state.mining_enabled && !this->state.offload_enabled)
 	{
 		this->disable_motors();
-		this->state.mining_started_trencher = false;
+		this->state.mining_lowered_hopper = false;
 
 		ctre::phoenix6::controls::VelocityVoltage trencher_velo{ Robot::TRENCHER_MAX_VELO, 5_tr_per_s_sq, false, 0_V, 0, false };
 		trencher.SetControl(trencher_velo);
@@ -183,15 +193,9 @@ uint8_t Robot::mining_init()
 		this->state.mining_enabled = true;
 		this->state.auto_operation_start_time = std::chrono::system_clock::now();
 	}
-	else
-	{
-		if(this->state.mining_enabled) return 1;
-		else return 3;
-	}
-	return 0;
 }
 
-uint8_t Robot::mining_shutdown()
+void Robot::mining_shutdown()
 {
 	if (this->state.mining_enabled && !this->state.offload_enabled)
 	{
@@ -202,49 +206,30 @@ uint8_t Robot::mining_shutdown()
 
 		this->state.mining_complete = true;
 	}
-	else
-	{
-		if(!this->state.mining_enabled) return 1;
-		else return 3;
-	}
 
-	return 0;
 }
 
-uint8_t Robot::offload_init()
+void Robot::offload_init()
 {
 	if(!this->state.offload_enabled && !this->state.mining_enabled)
 	{
 		this->disable_motors();
 
-		this->state.mining_started_trencher = false;
+		this->state.mining_lowered_hopper = false;
 		this->state.offload_traversal_reached = false;
 
 		this->state.offload_enabled = true;
 		this->state.auto_operation_start_time = std::chrono::system_clock::now();
 		this->state.offload_traversal_start_time = std::chrono::system_clock::now();
-
-		return 0;
-	}
-	else
-	{
-		if (this->state.offload_enabled) return 1;
-		else return 3;
 	}
 }
 
-uint8_t Robot::offload_shutdown()
+void Robot::offload_shutdown()
 {
 	if((this->state.offload_enabled && !this->state.mining_enabled) || true)
 	{
 		this->disable_motors();
 		this->state.mining_complete = true;
-		return 0;
-	}
-	else
-	{
-		if (!this->state.offload_enabled) return 2;
-		else return 3;
 	}
 }
 
@@ -254,7 +239,6 @@ uint8_t Robot::offload_shutdown()
 
 void Robot::periodic_handle_serial_control()
 {
-	return;	// not actual code
 	if (this->state.serial_enabled)
 	{
 		if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x13) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
@@ -298,7 +282,7 @@ void Robot::periodic_handle_serial_control()
 void Robot::periodic_handle_mining()
 {
 	// start mining lower actuators
-	if(this->state.mining_enabled && !this->state.mining_started_trencher)
+	if(this->state.mining_enabled && !this->state.mining_lowered_hopper)
 	{
 		double pos = hopper_actuator_pot.Get();
 
@@ -306,7 +290,7 @@ void Robot::periodic_handle_mining()
 			hopper_actuator.Set(0.75);
 		} else {
 			hopper_actuator.Set(0.0);
-			this->state.mining_started_trencher = true;
+			this->state.mining_lowered_hopper = true;
 			this->state.auto_operation_start_time = std::chrono::system_clock::now();  
 			if (this->state.serial_enabled) {
 				serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
@@ -315,14 +299,14 @@ void Robot::periodic_handle_mining()
 	}
 
 	// keep track of mining time, has reached run time?
-	if(this->state.mining_enabled && this->state.mining_started_trencher && !this->state.mining_complete)
+	if(this->state.mining_enabled && this->state.mining_lowered_hopper && !this->state.mining_complete)
 	{
 		auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - this->state.auto_operation_start_time);
 		if(duration.count() > Robot::MINING_RUN_TIME_SECONDS && !this->state.serial_enabled) {
 			this->mining_shutdown();
 		}
 
-		if(this->state.mining_started_trencher) {
+		if(this->state.mining_lowered_hopper) {
 			// drivetrain motion settings
 			ctre::phoenix6::controls::VelocityVoltage drivetrain_velo { Robot::TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false };
 			track_left.SetControl(drivetrain_velo);
@@ -379,7 +363,7 @@ void Robot::periodic_handle_offload()
 	}
 
     // start offload raise actuators
-    if(this->state.offload_enabled && this->state.offload_traversal_reached && !this->state.mining_started_trencher)
+    if(this->state.offload_enabled && this->state.offload_traversal_reached && !this->state.mining_lowered_hopper)
 	{
 		double pos = hopper_actuator_pot.Get();
 
@@ -387,7 +371,7 @@ void Robot::periodic_handle_offload()
 			hopper_actuator.Set(-1.0);
 		} else {
 			hopper_actuator.Set(0.0);
-			this->state.mining_started_trencher = true;
+			this->state.mining_lowered_hopper = true;
 			this->state.auto_operation_start_time = std::chrono::system_clock::now();
 
 			ctre::phoenix6::controls::VelocityDutyCycle hopper_belt_velo = Robot::HOPPER_BELT_MAX_VELO * -1.0;
@@ -396,11 +380,11 @@ void Robot::periodic_handle_offload()
     }
 
     // keep track of offload time, has reached run time?
-    if(this->state.offload_enabled && this->state.mining_started_trencher && !this->state.mining_complete) {
+    if(this->state.offload_enabled && this->state.mining_lowered_hopper && !this->state.mining_complete) {
 		auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - this->state.auto_operation_start_time);
 		if (duration.count() > Robot::OFFLOAD_TOTAL_RUN_TIME) {
 			hopper_actuator.Set(0);
-			this->state.mining_started_trencher = false;
+			this->state.mining_lowered_hopper = false;
 			this->offload_shutdown();
 		}
     }
@@ -416,7 +400,7 @@ void Robot::periodic_handle_offload()
 			this->state.offload_traversal_reached = false;
 			this->state.offload_enabled = false;
 			this->state.mining_complete = false;
-			this->state.mining_started_trencher = false;
+			this->state.mining_lowered_hopper = false;
 			this->disable_motors();
 			if (this->state.serial_enabled) {
 				serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
@@ -511,7 +495,7 @@ void Robot::RobotInit()
 
 	// TODO: fix this with correct timing control
 	this->AddPeriodic([&] {
-		if (this->state.mining_enabled && this->state.mining_started_trencher && !this->state.mining_complete) {
+		if (this->state.mining_enabled && this->state.mining_lowered_hopper && !this->state.mining_complete) {
 			if (this->state.hopper_enabled) {
 				ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
 				hopper_belt.SetControl(hopper_belt_velo);
@@ -525,6 +509,11 @@ void Robot::RobotInit()
 
 	// this->telemetry_sender.putData(this);
 	frc::SmartDashboard::PutData("robot", this);
+
+	if(this->IsReal()) {
+		frc::DataLogManager::Start();	// setup offline logging
+		frc::DriverStation::StartDataLog(frc::DataLogManager::GetLog());	// log driverstation inputs
+	}
 	
 }
 
@@ -546,7 +535,7 @@ void Robot::AutonomousInit()
 	this->state.mining_enabled = false;
 	this->state.offload_enabled = false;
 	this->state.mining_complete = false;
-	this->state.mining_started_trencher = false;
+	this->state.mining_lowered_hopper = false;
 }
 
 void Robot::AutonomousPeriodic() {}
@@ -560,7 +549,7 @@ void Robot::TeleopInit()
 	this->state.mining_enabled = false;
 	this->state.offload_enabled = false;
 	this->state.mining_complete = false;
-	this->state.mining_started_trencher = false;
+	this->state.mining_lowered_hopper = false;
 }
 
 void Robot::TeleopPeriodic()

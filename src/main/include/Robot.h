@@ -59,16 +59,19 @@ public:
 	void InitSendable(wpi::SendableBuilder& builder) override;
 
 protected:
+
 	uint8_t get_moving_avg();
 
 	void configure_motors();
     void disable_motors();
 
-    uint8_t mining_init();
-    uint8_t mining_shutdown();
-    uint8_t offload_init();
-    uint8_t offload_shutdown();
+protected:
+    void mining_init();
+    void mining_shutdown();
+    void offload_init();
+    void offload_shutdown();
 
+protected:
 	void periodic_handle_serial_control();
 	void periodic_handle_mining();
 	void periodic_handle_offload();
@@ -102,7 +105,7 @@ private:
 			mining_complete = false,
 			hopper_enabled = false,
 			offload_traversal_reached = false,
-			mining_started_trencher = false;
+			mining_lowered_hopper = false;
 
 		double
 			driving_speed_scalar = Robot::DRIVING_MEDIUM_SPEED_SCALAR;
@@ -133,7 +136,7 @@ private:
 		&track_left,
 	};
 
-	SenderNT telemetry_sender;
+	// SenderNT telemetry_sender;
 
 	// Variables for moving average
 	uint8_t movingAvgRange = 10;
