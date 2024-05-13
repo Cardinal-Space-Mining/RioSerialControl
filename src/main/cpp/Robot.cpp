@@ -117,7 +117,7 @@ void Robot::RobotInit() {
 
 
   AddPeriodic([&] {
-    // start mining lower actuators
+    // start mining, lower actuators
     if (is_mining && !time_set) {
 
       double pos = hopper_actuator_pot.Get();
@@ -137,10 +137,12 @@ void Robot::RobotInit() {
     // keep track of mining time, has reached run time?
     if (is_mining && time_set && !finished_cycle) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_time);
-      if (duration.count() > mining_run_time && !serial_enable) {
+      // TODO serial_enable instead of !serial_enable?
+      if ((duration.count() > mining_run_time) && !serial_enable) {
         StopMining();
       }
-
+      
+      // If timer is running
       if (time_set) {
         // drivetrain motion settings
         ctre::phoenix6::controls::VelocityVoltage drivetrain_velo {TRACKS_MINING_MAX_VELO, 1_tr_per_s_sq, false, 0_V, 0, false};
@@ -190,9 +192,7 @@ void Robot::RobotInit() {
     // move to offload position
     if (is_offload && !is_offload_pos) {
       auto duration = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now() - start_move_time_off);
-      if ((serial_enable && duration.count() > offload_move_time_automatic) || 
-      (!serial_enable && duration.count() > offload_move_time_teleop)) 
-      {
+      if ((serial_enable && duration.count() > offload_move_time_automatic) || (!serial_enable && duration.count() > offload_move_time_teleop)) {
         is_offload_pos = true;
         track_left.Set(0);
         track_right.Set(0);
@@ -294,30 +294,7 @@ void Robot::RobotInit() {
   //   }
   // }, 100_ms);
 
-}
-
-/**
- * eventually maybe not do this
- */
-void Robot::RobotPeriodic() {}
-
-/**
- * Zeroing out all motors and enables serial to listen for opcodes
- */
-void Robot::AutonomousInit() {
-  DisableAllMotors();
-  serial_enable = true;
-  is_mining = false;
-  is_offload = false;
-  finished_cycle = false;
-  time_set = false;
-}
-
-/**
- * does nothing for now
- */
-void Robot::AutonomousPeriodic() {
-    AddPeriodic([&] {
+  AddPeriodic([&] {
     if (serial_enable)
     {
       if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x13) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
@@ -373,6 +350,100 @@ void Robot::AutonomousPeriodic() {
       }
   }
   }, 350_ms);
+
+  AddPeriodic([&] {
+    if (is_mining && time_set && !finished_cycle) {
+
+      if (on_off) {
+        ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
+        hopper_belt.SetControl(hopper_belt_velo);
+        on_off = !on_off;
+      } else {
+        hopper_belt.Set(0);
+        on_off = !on_off;
+      }
+  }
+  }, 1000_ms);
+
+}
+
+/**
+ * eventually maybe not do this
+ */
+void Robot::RobotPeriodic() {}
+
+/**
+ * Zeroing out all motors and enables serial to listen for opcodes
+ */
+void Robot::AutonomousInit() {
+  DisableAllMotors();
+  serial_enable = true;
+  is_mining = false;
+  is_offload = false;
+  finished_cycle = false;
+  time_set = false;
+}
+
+/**
+ * does nothing for now
+ */
+void Robot::AutonomousPeriodic() {
+  //   AddPeriodic([&] {
+  //   if (serial_enable)
+  //   {
+  //     if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x13) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
+  //     {
+  //       serial.Write(xon, 1); // response to being on
+  //       if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
+  //       {
+  //         int function_number = *reinterpret_cast<int*>(input_buffer);
+  //         uint8_t result;
+  //         switch (function_number) // choosing what to do based on opcode
+  //         {
+  //           case 0: //spinning up motor with params id and output
+  //           {
+  //             serial.Read(input_buffer, 12); // could be different based on opcode
+
+  //             int motor_number = *reinterpret_cast<int*>(input_buffer);
+  //             double output_value = *reinterpret_cast<double*>(input_buffer + 4);
+  //             (*motors[motor_number]).Set(output_value);
+  //             break;
+  //           }
+  //           case 1: // start autonomous mining
+  //             StartMining();
+  //             break;
+  //           case 2: // stop autonomous mining
+  //             StopMining();
+  //             break;
+  //           case 3: // start autonomous offload
+  //             StartOffload();
+  //             break;
+  //           case 4: // stop autonomous offload
+  //             StopOffload();
+  //             break;
+  //         }
+  //         // serial.Write(result, 1);
+  //         // serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+  //       }
+  //     }
+  //   }
+  // }, 1_ms);
+  
+  // AddPeriodic([&] {
+  //   if (is_mining && time_set && !finished_cycle) {
+
+  //     if (on_off) {
+  //       cout << "starting hopper" << endl;
+  //       ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
+  //       hopper_belt.SetControl(hopper_belt_velo);
+  //       on_off = !on_off;
+  //     } else {
+  //       cout << "stopping hopper" << endl;
+  //       hopper_belt.Set(0);
+  //       on_off = !on_off;
+  //     }
+  // }
+  // }, 350_ms);
 }
 
 /**
@@ -393,9 +464,9 @@ uint8_t Robot::getMovingAvg() {
   double newCurrent = 1.0;
   motorDataList.push_back(newCurrent);
   double currentAverage = 0;
-  if (motorDataList.size() > movingAvgRange) {
-    motorDataList.pop_front();
-  }
+  // if (motorDataList.size() > movingAvgRange) {
+  //   motorDataList.pop_front();
+  // }
   currentAverage = std::accumulate(motorDataList.begin(), motorDataList.end(), 0.0);
   currentAverage /= motorDataList.size();
   trenchAvgCurrent = currentAverage;
@@ -666,19 +737,19 @@ void Robot::TeleopPeriodic() {
     return;
   }
 
-  AddPeriodic([&] {
-    if (is_mining && time_set && !finished_cycle) {
+  // AddPeriodic([&] {
+  //   if (is_mining && time_set && !finished_cycle) {
 
-      if (on_off) {
-        ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
-        hopper_belt.SetControl(hopper_belt_velo);
-        on_off = !on_off;
-      } else {
-        hopper_belt.Set(0);
-        on_off = !on_off;
-      }
-  }
-  }, 1000_ms);
+  //     if (on_off) {
+  //       ctre::phoenix6::controls::VelocityVoltage hopper_belt_velo {HOPPER_BELT_MAX_MINING_VELO * -1.0, 1_tr_per_s_sq, false, 0_V, 0, false};
+  //       hopper_belt.SetControl(hopper_belt_velo);
+  //       on_off = !on_off;
+  //     } else {
+  //       hopper_belt.Set(0);
+  //       on_off = !on_off;
+  //     }
+  // }
+  // }, 1000_ms);
   
   this->DriveTrainControl();
   this->HopperControl();

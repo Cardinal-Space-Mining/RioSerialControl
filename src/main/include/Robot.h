@@ -120,6 +120,7 @@ class Robot : public frc::TimedRobot {
 
   bool on_off = false;
 
+  // timer has been started for run
   bool time_set = false;
   std::chrono::system_clock::time_point start_time;
   // constant for how long each mining run is in time (seconds)
