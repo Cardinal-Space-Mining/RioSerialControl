@@ -33,10 +33,7 @@ using namespace ctre::phoenix6;
 typedef ctre::phoenix6::hardware::TalonFX TalonFX6;
 typedef WPI_TalonFX TalonFX5;
 
-#define BUF_SIZE 13
 #define MOTOR_COUNT 5
-
-constexpr int PIGEON_CAN_ID = 5; // << Value!!!
 
 class Robot : public frc::TimedRobot, public wpi::Sendable {
 public:
@@ -56,11 +53,9 @@ public:
 	void TestPeriodic() override;
 	void SimulationInit() override;
 	void SimulationPeriodic() override;
-	void InitSendable(wpi::SendableBuilder& builder) override;
 
 protected:
-
-	uint8_t get_moving_avg();
+	void InitSendable(wpi::SendableBuilder& builder) override;
 
 	void configure_motors();
     void disable_motors();
@@ -77,24 +72,8 @@ protected:
 	void periodic_handle_offload();
 	void periodic_handle_teleop_input();
 
-	// void InitSendable(wpi::SendableBuilder &) override; // use for loggin motor data
 
 private:
-	// frc::SerialPort serial = frc::SerialPort(9600);
-	frc::SerialPort serial = frc::SerialPort(115200, frc::SerialPort::Port::kOnboard, 8, frc::SerialPort::Parity::kParity_None, frc::SerialPort::StopBits::kStopBits_One);
-
-	// char * input_buffer = (char *)malloc(sizeof(char) * BUF_SIZE);
-	// uint16_t input_i = 0;
-	// char * xon = (char *)malloc(sizeof(char) * 1);
-	// char * xoff = (char *)malloc(sizeof(char) * 1);
-	// char * time_buffer = (char *)malloc(sizeof(char) * 13);
-	uint16_t input_i{ 0 };
-	char
-		input_buffer[BUF_SIZE],
-		xon[1],
-		xoff[1],
-		time_buffer[13];
-
 	// state
 	class State : public wpi::Sendable{
 	public:
@@ -137,12 +116,6 @@ private:
 	};
 
 	// SenderNT telemetry_sender;
-
-	// Variables for moving average
-	uint8_t movingAvgRange = 10;
-	double trenchAvgCurrent = 0.0;
-	static constexpr double avg_current_thresh = 50.0;
-	std::deque<double> motorDataList;
 
 	static constexpr auto
 	// motor physical speed targets

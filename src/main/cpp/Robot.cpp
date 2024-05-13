@@ -35,31 +35,6 @@ static constexpr long double PI = 3.14159265358979323846;
 
 namespace util {
 
-	/** Convert int to character, google itoa
-	 * @param i
-	 * @param b
-	 * @return */
-	char* itoa(int i, char b[])
-	{
-		char const digit[] = "0123456789";
-		char* p = b;
-		if(i<0){
-			*p++ = '-';
-			i *= -1;
-		}
-		int shifter = i;
-		do { //Move to where representation ends
-			++p;
-			shifter = shifter/10;
-		} while(shifter);
-		*p = '\0';
-		do { //Move back, inserting digits as u go
-			*--p = digit[i%10];
-			i = i/10;
-		} while(i);
-		return b;
-	}
-
 	frc::DifferentialDrive::WheelSpeeds computeWheelScalars(double x, double y, double deadzone)
 	{
 		const double augmented_angle = std::atan2(x, y) + (PI / 4);	// x and y are inverted to make a CW "heading" angle
@@ -119,26 +94,6 @@ void Robot::InitSendable(wpi::SendableBuilder& builder)
 	util::add_fx5_dbg_info(builder, hopper_actuator, "HopperActuator");
 	this->state.InitSendable(builder);
 }
-
-
-
-// -------- Moving Average -------------
-uint8_t Robot::get_moving_avg()
-{
-	double newCurrent = 1.0;
-	motorDataList.push_back(newCurrent);
-	double currentAverage = 0;
-
-	if(motorDataList.size() > movingAvgRange) motorDataList.pop_front();
-
-	currentAverage = std::accumulate(motorDataList.begin(), motorDataList.end(), 0.0);
-	currentAverage /= motorDataList.size();
-	trenchAvgCurrent = currentAverage;
-
-	if(trenchAvgCurrent > avg_current_thresh) return 1;
-	else return 0;
-}
-
 
 
 // --------- Setup/Helpers ----------
@@ -233,52 +188,6 @@ void Robot::offload_shutdown()
 	}
 }
 
-
-
-
-
-void Robot::periodic_handle_serial_control()
-{
-	if (this->state.serial_enabled)
-	{
-		if (serial.Read(input_buffer, 1) == 1 && input_buffer[0] == 0x13) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
-		{
-			serial.Write(xon, 1); // response to being on
-			if (serial.Read(input_buffer, 4)) // in corresponding to opcode 4 byte int
-			{
-				int function_number = *reinterpret_cast<int*>(input_buffer);
-				// uint8_t result;
-				switch (function_number) // choosing what to do based on opcode
-				{
-					case 0: //spinning up motor with params id and output
-					{
-						serial.Read(input_buffer, 12); // could be different based on opcode
-
-						int motor_number = *reinterpret_cast<int*>(input_buffer);
-						double output_value = *reinterpret_cast<double*>(input_buffer + 4);
-						motors[motor_number]->Set(output_value);
-						break;
-					}
-					case 1: // start autonomous mining
-						mining_init();
-						break;
-					case 2: // stop autonomous mining
-						mining_shutdown();
-						break;
-					case 3: // start autonomous offload
-						offload_init();
-						break;
-					case 4: // stop autonomous offload
-						offload_shutdown();
-						break;
-				}
-				// serial.Write(result, 1);
-				// serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
-			}
-		}
-	}
-}
-
 void Robot::periodic_handle_mining()
 {
 	// start mining lower actuators
@@ -292,9 +201,6 @@ void Robot::periodic_handle_mining()
 			hopper_actuator.Set(0.0);
 			this->state.mining_lowered_hopper = true;
 			this->state.auto_operation_start_time = std::chrono::system_clock::now();  
-			if (this->state.serial_enabled) {
-				serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
-			}
 		}
 	}
 
@@ -328,9 +234,6 @@ void Robot::periodic_handle_mining()
 			this->state.mining_enabled = false;
 			this->state.mining_complete = false;
 			this->disable_motors();
-			if (this->state.serial_enabled) {
-				serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
-			}
 		} 
     }
 }
@@ -402,9 +305,6 @@ void Robot::periodic_handle_offload()
 			this->state.mining_complete = false;
 			this->state.mining_lowered_hopper = false;
 			this->disable_motors();
-			if (this->state.serial_enabled) {
-				serial.Write(xoff, 1); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
-			}
 		}
     }
 }
@@ -480,18 +380,9 @@ void Robot::periodic_handle_teleop_input()
 // -------------- TimedRobot Overrides --------------
 void Robot::RobotInit()
 {
-	// setup serial
-	xon[0] = 0x13;
-	xoff[0] = 0x11;
-	serial.SetTimeout(units::second_t(.1));
-	// serial.Reset();
-
 	// setup motors
 	this->configure_motors();
 	this->disable_motors();
-
-	// handle serial updates at a 1 ms interval - this rate may need to be lowered if this causes issues
-	this->AddPeriodic(std::bind(&Robot::periodic_handle_serial_control, this), 20_ms);
 
 	// TODO: fix this with correct timing control
 	this->AddPeriodic([&] {
