@@ -196,10 +196,8 @@ void Robot::offload_shutdown()
 {
 	if((this->state.offload_enabled && !this->state.mining_enabled) || true)
 	{
+		this->state.reset();
 		this->disable_motors();
-
-		this->state.teleauto_operation_complete = true;
-		this->state.offload_enabled = false;
 	}
 }
 
@@ -299,8 +297,11 @@ void Robot::periodic_handle_offload()
 		auto duration = std::chrono::duration<double>{ std::chrono::system_clock::now() - this->state.auto_operation_start_time };
 		if (duration.count() > this->state.teleauto_offload_dump_time) {
 			hopper_actuator.Set(0);
+
 			this->state.mining_lowered_hopper = false;
-			this->offload_shutdown();
+			this->state.teleauto_operation_complete = true;
+
+			this->disable_motors();
 		}
 	}
 
@@ -312,11 +313,7 @@ void Robot::periodic_handle_offload()
 		if (pos > Robot::TRAVERSAL_POT_VALUE) {
 			hopper_actuator.Set(Robot::OFFLOAD_HOPPER_MOVE_PERCENT);
 		} else {
-			this->state.offload_traversal_reached = false;
-			this->state.offload_enabled = false;
-			this->state.teleauto_operation_complete = false;
-			this->state.mining_lowered_hopper = false;
-			this->disable_motors();
+			this->offload_shutdown();
 		}
 	}
 }
