@@ -19,4 +19,9 @@ namespace LogitechConstants
     static constexpr int BUTTON_START = 8;
     static constexpr int LEFT_JOY_DOWN = 9;
     static constexpr int RIGHT_JOY_DOWN = 10;
+
+    static constexpr int DPAD_UP_POV = 0;
+    static constexpr int DPAD_RIGHT_POV = 90;
+    static constexpr int DPAD_DOWN_POV = 180;
+    static constexpr int DPAD_LEFT_POV = 270;
 } // namespace LogitechConstants
