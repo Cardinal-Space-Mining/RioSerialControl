@@ -177,6 +177,13 @@ void Robot::stop_all()
 	this->disable_motors();
 }
 
+void Robot::disable_serial()
+{
+	this->serial.enabled = false;
+	this->state.mining.serial_control = Robot::State::SerialControlState::DISABLED;
+	this->state.offload.serial_control = Robot::State::SerialControlState::DISABLED;
+}
+
 void Robot::send_serial_success()
 {
 	static char result = 0;
@@ -196,8 +203,10 @@ void Robot::mining_init(bool serial)
 
 		this->state.mining.enabled = true;
 		this->state.mining.stage = Robot::State::MiningStage::INITIALIZING;
-		if(this->serial.enabled && serial) this->state.mining.serial_control = Robot::State::SerialControlState::STARTED;
-		else this->state.mining.serial_control = Robot::State::SerialControlState::DISABLED;
+		this->state.mining.serial_control =
+			(this->serial.enabled && serial) ?
+				this->state.mining.serial_control = Robot::State::SerialControlState::STARTED :
+				this->state.mining.serial_control = Robot::State::SerialControlState::DISABLED;
 	}
 }
 
@@ -227,8 +236,10 @@ void Robot::offload_init(bool serial)
 
 		this->state.offload.enabled = true;
 		this->state.offload.stage = Robot::State::OffloadingStage::INITIALIZING;
-		if(this->serial.enabled && serial) this->state.offload.serial_control = Robot::State::SerialControlState::STARTED;
-		else this->state.offload.serial_control = Robot::State::SerialControlState::DISABLED;
+		this->state.offload.serial_control =
+			(this->serial.enabled && serial) ?
+				this->state.offload.serial_control = Robot::State::SerialControlState::STARTED :
+				this->state.offload.serial_control = Robot::State::SerialControlState::DISABLED;
 	}
 }
 
@@ -257,8 +268,29 @@ void Robot::offload_shutdown(bool serial)
 // ----------------- Periodic Handlers ----------------------
 void Robot::periodic_handle_serial_control()
 {
-	if(this->serial.enabled)
+	if(this->serial.enabled)	// basically if in autonomous mode
 	{
+		if(this->IsSimulation())
+		{
+			const bool
+				any_ops_running = (this->state.mining.enabled || this->state.offload.enabled),
+				definite_is_mining = (this->state.mining.enabled && !this->state.offload.enabled),
+				definite_is_offload = (!this->state.mining.enabled && this->state.offload.enabled);
+
+			if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_INIT_POV) {		// dpad top
+				this->mining_init(true);
+			}
+			if(definite_is_mining && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_STOP_POV) {	// dpad bottom
+				this->mining_shutdown(true);
+			}
+			if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_INIT_POV) {	// dpad right
+				this->offload_init(true);
+			}
+			if(definite_is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
+				this->offload_shutdown(true);
+			}
+		}	// end testing code
+
 		if(this->serial.port.Read(this->serial.input_buffer, 1) == 1 && this->serial.input_buffer[0] == XON) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
 		{
 			this->serial.port.Write(&XON, sizeof(XON)); // response to being on
@@ -311,7 +343,7 @@ void Robot::periodic_handle_serial_control()
 					case SerialCommand::STOP_OFFLOAD:
 					{
 						this->offload_shutdown(true);
-						this->send_serial_success();
+						// this->send_serial_success();
 						break;
 					}
 					case SerialCommand::INVALID:
@@ -352,6 +384,7 @@ void Robot::periodic_handle_mining()
 						this->hopper_actuator.Set(Robot::HOPPER_ACUTATOR_MOVE_SPEED);
 					else
 						this->hopper_actuator.Set(Robot::HOPPER_ACTUATOR_PLUNGE_SPEED);
+
 					break;
 				}
 				else
@@ -365,8 +398,8 @@ void Robot::periodic_handle_mining()
 			}
 			case Robot::State::MiningStage::TRAVERSING:
 			{
-				if(this->state.mining.serial_control == Robot::State::SerialControlState::STARTED ||
-					(util::seconds_since(this->state.mining.traversal_start_time) < this->state.mining.target_mining_time))
+				if( (this->state.mining.serial_control == Robot::State::SerialControlState::STARTED) ||
+					(!this->serial.enabled && util::seconds_since(this->state.mining.traversal_start_time) < this->state.mining.target_mining_time))
 				{
 					// set trencher
 					this->trencher.SetControl(
@@ -462,7 +495,7 @@ void Robot::periodic_handle_offload()
 			{
 				const double duration = util::seconds_since(this->state.offload.start_time);
 				if( (this->serial.enabled && duration < this->state.offload.auto_target_backup_time) ||
-					(!this->serial.enabled && duration < this->state.offload.tele_target_backup_time) )
+					(!this->serial.enabled && duration < this->state.offload.tele_target_backup_time) )		// use serial_control state for this if deemed reliable enough
 				{
 					// drive backwards
 					ctre::phoenix6::controls::VelocityVoltage
@@ -557,6 +590,7 @@ void Robot::periodic_handle_teleop_input()
 	if(logitech.GetRawButtonPressed(Robot::DISABLE_ALL_ACTIONS_BUTTON_IDX))
 	{
 		this->stop_all();
+		this->disable_serial();	// resets internal serial_control states
 	}
 
 	const bool
@@ -651,7 +685,7 @@ void Robot::RobotInit()
 	// setup motors
 	this->configure_motors();
 	this->disable_motors();
-	this->serial.enabled = false;
+	this->disable_serial();
 
 	// this->telemetry_sender.putData(this);
 	frc::SmartDashboard::PutData("robot", this);
@@ -687,7 +721,7 @@ void Robot::AutonomousPeriodic() {}
 void Robot::TeleopInit()
 {
 	this->stop_all();
-	this->serial.enabled = false;
+	this->disable_serial();
 }
 
 void Robot::TeleopPeriodic()
@@ -699,7 +733,7 @@ void Robot::TeleopPeriodic()
 void Robot::DisabledInit()
 {
 	this->stop_all();
-	this->serial.enabled = false;
+	this->disable_serial();
 }
 void Robot::DisabledPeriodic() {}
 

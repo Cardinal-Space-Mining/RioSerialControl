@@ -57,6 +57,7 @@ protected:
 	void configure_motors();
 	void disable_motors();
 	void stop_all();
+	void disable_serial();
 	void send_serial_success();
 
 protected:
@@ -206,7 +207,7 @@ private:
 	// timed operations
 		MINING_RUN_TIME_SECONDS = 15.0,           // teleauto mining run time
 		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3.0,   // teleauto offload duration
-		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 1.0,
+		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 2.0,
 		OFFLOAD_DUMP_TIME = 6.0;
 	// auto belt duty cycle
 	static constexpr double
