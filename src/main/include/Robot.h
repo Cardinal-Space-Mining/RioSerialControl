@@ -57,12 +57,13 @@ protected:
 	void configure_motors();
 	void disable_motors();
 	void stop_all();
+	void send_serial_success();
 
 protected:
-	void mining_init();
-	void mining_shutdown();
-	void offload_init();
-	void offload_shutdown();
+	void mining_init(bool serial = false);
+	void mining_shutdown(bool serial = false);
+	void offload_init(bool serial = false);
+	void offload_shutdown(bool serial = false);
 
 protected:
 	void periodic_handle_serial_control();
@@ -90,12 +91,18 @@ private:
 			LOWERING_HOPPER = 4,
 			FINISHED = 5
 		};
+		enum class SerialControlState {
+			DISABLED = 0,
+			STARTED = 1,
+			CANCELLED = 2
+		};
 
 		double driving_speed_scalar = Robot::DRIVING_MEDIUM_SPEED_SCALAR;
 
 		struct {
 			bool enabled = false;
 			MiningStage stage = MiningStage::FINISHED;
+			SerialControlState serial_control = SerialControlState::DISABLED;
 
 			std::chrono::system_clock::time_point traversal_start_time;
 
@@ -105,6 +112,7 @@ private:
 		struct {
 			bool enabled = false;
 			OffloadingStage stage = OffloadingStage::FINISHED;
+			SerialControlState serial_control = SerialControlState::DISABLED;
 
 			std::chrono::system_clock::time_point start_time, dump_start_time;
 

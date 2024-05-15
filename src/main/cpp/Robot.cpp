@@ -95,11 +95,13 @@ void Robot::State::reset_auto_states()
 
 void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 {
-	builder.AddBooleanProperty("mining_enabled", [this](){return this->mining.enabled;}, nullptr);
-	builder.AddBooleanProperty("offload_enabled", [this](){return this->offload.enabled;}, nullptr);
-	builder.AddIntegerProperty("mining_stage", [this](){return static_cast<int>(this->mining.stage);}, nullptr);
-	builder.AddIntegerProperty("offload_stage", [this](){return static_cast<int>(this->offload.stage);}, nullptr);
-	builder.AddDoubleProperty("driving_speed_scalar", [this](){return this->driving_speed_scalar;}, nullptr);
+	builder.AddBooleanProperty("state/mining_enabled", [this](){return this->mining.enabled;}, nullptr);
+	builder.AddBooleanProperty("state/offload_enabled", [this](){return this->offload.enabled;}, nullptr);
+	builder.AddIntegerProperty("state/mining_stage", [this](){return static_cast<int>(this->mining.stage);}, nullptr);
+	builder.AddIntegerProperty("state/offload_stage", [this](){return static_cast<int>(this->offload.stage);}, nullptr);
+	builder.AddIntegerProperty("state/mining_serial_control_state", [this](){return static_cast<int>(this->mining.serial_control);}, nullptr);
+	builder.AddIntegerProperty("state/offload_serial_control_state", [this](){return static_cast<int>(this->offload.serial_control);}, nullptr);
+	builder.AddDoubleProperty("state/driving_speed_scalar", [this](){return this->driving_speed_scalar;}, nullptr);
 
 	builder.AddDoubleProperty("tuning/mining_runtime", [this](){return this->mining.target_mining_time;}, [this](double v){this->mining.target_mining_time = v;});
 	builder.AddDoubleProperty("tuning/tele_offload_backup_time", [this](){return this->offload.tele_target_backup_time;}, [this](double v){this->offload.tele_target_backup_time = v;});
@@ -126,6 +128,7 @@ void Robot::InitSendable(wpi::SendableBuilder& builder)
 	util::add_fx6_dbg_info(builder, hopper_belt, "HopperBelt");
 	util::add_srx_dbg_info(builder, hopper_actuator, "HopperActuator");
 	builder.AddDoubleProperty("HopperActuator/potentiometer", [this](){ return this->hopper_actuator_pot.Get(); }, nullptr);
+	builder.AddBooleanProperty("state/serial_enabled", [this](){return this->serial.enabled;}, nullptr);
 
 	this->state.InitSendable(builder);
 }
@@ -174,11 +177,18 @@ void Robot::stop_all()
 	this->disable_motors();
 }
 
+void Robot::send_serial_success()
+{
+	static char result = 0;
+	this->serial.port.Write(&result, sizeof(result));
+	this->serial.port.Write(&XOFF, sizeof(XOFF)); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+}
+
 
 
 // ------------- Mining/Offload init and shutdown --------------
 
-void Robot::mining_init()
+void Robot::mining_init(bool serial)
 {
 	if(!this->state.mining.enabled && !this->state.offload.enabled)
 	{
@@ -186,13 +196,22 @@ void Robot::mining_init()
 
 		this->state.mining.enabled = true;
 		this->state.mining.stage = Robot::State::MiningStage::INITIALIZING;
+		if(this->serial.enabled && serial) this->state.mining.serial_control = Robot::State::SerialControlState::STARTED;
+		else this->state.mining.serial_control = Robot::State::SerialControlState::DISABLED;
 	}
 }
 
-void Robot::mining_shutdown()
+void Robot::mining_shutdown(bool serial)
 {
 	if (this->state.mining.enabled && !this->state.offload.enabled)
 	{
+		if(this->serial.enabled && serial)
+		{
+			this->state.mining.serial_control = Robot::State::SerialControlState::CANCELLED;
+			return;
+		}
+		else this->state.mining.serial_control = Robot::State::SerialControlState::DISABLED;
+
 		this->stop_all();
 
 		this->state.mining.enabled = false;
@@ -200,7 +219,7 @@ void Robot::mining_shutdown()
 	}
 }
 
-void Robot::offload_init()
+void Robot::offload_init(bool serial)
 {
 	if(!this->state.offload.enabled && !this->state.mining.enabled)
 	{
@@ -208,13 +227,22 @@ void Robot::offload_init()
 
 		this->state.offload.enabled = true;
 		this->state.offload.stage = Robot::State::OffloadingStage::INITIALIZING;
+		if(this->serial.enabled && serial) this->state.offload.serial_control = Robot::State::SerialControlState::STARTED;
+		else this->state.offload.serial_control = Robot::State::SerialControlState::DISABLED;
 	}
 }
 
-void Robot::offload_shutdown()
+void Robot::offload_shutdown(bool serial)
 {
 	if(this->state.offload.enabled && !this->state.mining.enabled)
 	{
+		if(this->serial.enabled && serial)
+		{
+			this->state.offload.serial_control = Robot::State::SerialControlState::CANCELLED;
+			return;
+		}
+		else this->state.offload.serial_control = Robot::State::SerialControlState::DISABLED;
+
 		this->stop_all();
 
 		this->state.offload.enabled = false;
@@ -260,26 +288,30 @@ void Robot::periodic_handle_serial_control()
 								false
 							}
 						);
+
+						// this->send_serial_success();
 						break;
 					}
 					case SerialCommand::START_MINING:
 					{
-						this->mining_init();
+						this->mining_init(true);
+						// this->send_serial_success();
 						break;
 					}
 					case SerialCommand::STOP_MINING:
 					{
-						this->mining_shutdown();
+						this->mining_shutdown(true);
 						break;
 					}
 					case SerialCommand::START_OFFLOAD:
 					{
-						this->offload_init();
+						this->offload_init(true);
 						break;
 					}
 					case SerialCommand::STOP_OFFLOAD:
 					{
-						this->offload_shutdown();
+						this->offload_shutdown(true);
+						this->send_serial_success();
 						break;
 					}
 					case SerialCommand::INVALID:
@@ -287,9 +319,7 @@ void Robot::periodic_handle_serial_control()
 					default:
 					{}
 				}
-				char result = 0;
-				this->serial.port.Write(&result, sizeof(result));
-				this->serial.port.Write(&XOFF, sizeof(XOFF)); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+				this->send_serial_success();
 			}
 		}
 	}
@@ -327,6 +357,7 @@ void Robot::periodic_handle_mining()
 				else
 				{
 					this->hopper_actuator.Set(0);
+					// if(this->state.mining.serial_control != Robot::State::SerialControlState::DISABLED) this->send_serial_success();
 					this->state.mining.traversal_start_time = system_time::now();
 					this->state.mining.stage = Robot::State::MiningStage::TRAVERSING;
 					// allow fallthrough bc we might as well start processing traversal
@@ -334,7 +365,8 @@ void Robot::periodic_handle_mining()
 			}
 			case Robot::State::MiningStage::TRAVERSING:
 			{
-				if(util::seconds_since(this->state.mining.traversal_start_time) < this->state.mining.target_mining_time)
+				if(this->state.mining.serial_control == Robot::State::SerialControlState::STARTED ||
+					(util::seconds_since(this->state.mining.traversal_start_time) < this->state.mining.target_mining_time))
 				{
 					// set trencher
 					this->trencher.SetControl(
@@ -399,6 +431,7 @@ void Robot::periodic_handle_mining()
 				else
 				{
 					this->hopper_actuator.Set(0);
+					// if(this->state.mining.serial_control == Robot::State::SerialControlState::CANCELLED) this->send_serial_success();
 					this->state.mining.stage = Robot::State::MiningStage::FINISHED;
 					// fallthrough to call shutdown
 				}
@@ -498,6 +531,7 @@ void Robot::periodic_handle_offload()
 				else
 				{
 					this->hopper_actuator.Set(0);
+					// if(this->state.offload.serial_control != Robot::State::SerialControlState::DISABLED) this->send_serial_success();
 					this->state.offload.stage = Robot::State::OffloadingStage::FINISHED;
 					// fallthrough
 				}
@@ -617,6 +651,7 @@ void Robot::RobotInit()
 	// setup motors
 	this->configure_motors();
 	this->disable_motors();
+	this->serial.enabled = false;
 
 	// this->telemetry_sender.putData(this);
 	frc::SmartDashboard::PutData("robot", this);
@@ -643,6 +678,7 @@ void Robot::RobotPeriodic()
 void Robot::AutonomousInit()
 {
 	this->stop_all();
+	this->serial.enabled = true;
 }
 
 void Robot::AutonomousPeriodic() {}
@@ -651,6 +687,7 @@ void Robot::AutonomousPeriodic() {}
 void Robot::TeleopInit()
 {
 	this->stop_all();
+	this->serial.enabled = false;
 }
 
 void Robot::TeleopPeriodic()
@@ -662,6 +699,7 @@ void Robot::TeleopPeriodic()
 void Robot::DisabledInit()
 {
 	this->stop_all();
+	this->serial.enabled = false;
 }
 void Robot::DisabledPeriodic() {}
 
