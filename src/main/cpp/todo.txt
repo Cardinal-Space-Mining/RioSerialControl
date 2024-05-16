@@ -1,7 +1,5 @@
- - configure hopper actuator
- ? mining stop --> teleop
- x fix hopper, trencher control
- - hopper increment for teleauto mining
- x test speed modes
- x offline logging
- x hopper actuator telemetry
+ x constants
+ - recovery from erroneous states
+ X configure hopper actuator
+ X hopper increment for teleauto mining
+ - add move forward at the end of offload
