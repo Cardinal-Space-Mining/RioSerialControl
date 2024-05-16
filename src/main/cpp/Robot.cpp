@@ -266,31 +266,32 @@ void Robot::offload_shutdown(bool serial)
 
 
 // ----------------- Periodic Handlers ----------------------
+
 void Robot::periodic_handle_serial_control()
 {
 	if(this->serial.enabled)	// basically if in autonomous mode
 	{
-		// if(this->IsSimulation())	// manually call the serial commands
-		// {
-		// 	const bool
-		// 		any_ops_running = (this->state.mining.enabled || this->state.offload.enabled),
-		// 		definite_is_mining = (this->state.mining.enabled && !this->state.offload.enabled),
-		// 		definite_is_offload = (!this->state.mining.enabled && this->state.offload.enabled);
+		if(this->IsSimulation())	// manually call the serial commands
+		{
+			const bool
+				any_ops_running = (this->state.mining.enabled || this->state.offload.enabled),
+				definite_is_mining = (this->state.mining.enabled && !this->state.offload.enabled),
+				definite_is_offload = (!this->state.mining.enabled && this->state.offload.enabled);
 
-		// 	if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_INIT_POV) {		// dpad top
-		// 		this->mining_init(true);
-		// 	}
-		// 	if(definite_is_mining && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_STOP_POV) {	// dpad bottom
-		// 		this->mining_shutdown(true);
-		// 	}
-		// 	if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_INIT_POV) {	// dpad right
-		// 		this->offload_init(true);
-		// 	}
-		// 	if(definite_is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
-		// 		this->offload_shutdown(true);
-		// 	}
-		// }	// end testing code
-		// else
+			if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_INIT_POV) {		// dpad top
+				this->mining_init(true);
+			}
+			if(definite_is_mining && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_STOP_POV) {	// dpad bottom
+				this->mining_shutdown(true);
+			}
+			if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_INIT_POV) {	// dpad right
+				this->offload_init(true);
+			}
+			if(definite_is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
+				this->offload_shutdown(true);
+			}
+		}	// end testing code
+		else
 		if(this->serial.port.Read(this->serial.input_buffer, 1) == 1 && this->serial.input_buffer[0] == XON) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
 		{
 			this->serial.port.Write(&XON, sizeof(XON)); // response to being on
@@ -584,7 +585,6 @@ void Robot::periodic_handle_offload()
 
 
 
-// ------------------ Periodic Handlers --------------------
 void Robot::periodic_handle_teleop_input()
 {
 	// ------------ HARD RESET ------------
@@ -681,6 +681,7 @@ void Robot::periodic_handle_teleop_input()
 
 
 // -------------- TimedRobot Overrides --------------
+
 void Robot::RobotInit()
 {
 	// setup motors
@@ -700,7 +701,7 @@ void Robot::RobotInit()
 void Robot::RobotPeriodic()
 {
 	// putting this here for now
-	this->periodic_handle_serial_control();
+	// this->periodic_handle_serial_control();
 
 	// run periodic control
 	this->periodic_handle_mining();
