@@ -270,27 +270,27 @@ void Robot::periodic_handle_serial_control()
 {
 	if(this->serial.enabled)	// basically if in autonomous mode
 	{
-		if(this->IsSimulation())
-		{
-			const bool
-				any_ops_running = (this->state.mining.enabled || this->state.offload.enabled),
-				definite_is_mining = (this->state.mining.enabled && !this->state.offload.enabled),
-				definite_is_offload = (!this->state.mining.enabled && this->state.offload.enabled);
+		// if(this->IsSimulation())	// manually call the serial commands
+		// {
+		// 	const bool
+		// 		any_ops_running = (this->state.mining.enabled || this->state.offload.enabled),
+		// 		definite_is_mining = (this->state.mining.enabled && !this->state.offload.enabled),
+		// 		definite_is_offload = (!this->state.mining.enabled && this->state.offload.enabled);
 
-			if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_INIT_POV) {		// dpad top
-				this->mining_init(true);
-			}
-			if(definite_is_mining && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_STOP_POV) {	// dpad bottom
-				this->mining_shutdown(true);
-			}
-			if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_INIT_POV) {	// dpad right
-				this->offload_init(true);
-			}
-			if(definite_is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
-				this->offload_shutdown(true);
-			}
-		}	// end testing code
-
+		// 	if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_INIT_POV) {		// dpad top
+		// 		this->mining_init(true);
+		// 	}
+		// 	if(definite_is_mining && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_STOP_POV) {	// dpad bottom
+		// 		this->mining_shutdown(true);
+		// 	}
+		// 	if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_INIT_POV) {	// dpad right
+		// 		this->offload_init(true);
+		// 	}
+		// 	if(definite_is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
+		// 		this->offload_shutdown(true);
+		// 	}
+		// }	// end testing code
+		// else
 		if(this->serial.port.Read(this->serial.input_buffer, 1) == 1 && this->serial.input_buffer[0] == XON) //reads 1 byte, if its xon it continues, clear any incomplete buffer and listens to handshake
 		{
 			this->serial.port.Write(&XON, sizeof(XON)); // response to being on
@@ -369,7 +369,8 @@ void Robot::periodic_handle_mining()
 			case Robot::State::MiningStage::LOWERING_HOPPER:
 			{
 				const double pot_val = this->hopper_actuator_pot.Get();
-				if(pot_val > Robot::MINING_POT_VALUE)
+				if( pot_val > Robot::MINING_POT_VALUE && (!this->serial.enabled ||
+					this->state.mining.serial_control == Robot::State::SerialControlState::STARTED))
 				{
 					// set trencher
 					this->trencher.SetControl(
@@ -601,16 +602,16 @@ void Robot::periodic_handle_teleop_input()
 	// ---------- TELEAUTO CONTROl ----------
 	{
 		if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_INIT_POV) {		// dpad top
-			this->mining_init();
+			this->mining_init(false);
 		}
 		if(definite_is_mining && logitech.GetPOV(0) == Robot::TELEAUTO_MINING_STOP_POV) {	// dpad bottom
-			this->mining_shutdown();
+			this->mining_shutdown(false);
 		}
 		if(!any_ops_running && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_INIT_POV) {	// dpad right
-			this->offload_init();
+			this->offload_init(false);
 		}
 		if(definite_is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
-			this->offload_shutdown();
+			this->offload_shutdown(false);
 		}
 	}
 
