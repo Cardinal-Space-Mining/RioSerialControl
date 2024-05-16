@@ -49,7 +49,7 @@ wpi.sim.addDriverstation()
 model {
     // toolChains {
     //     visualCpp(VisualCpp) {
-    //         installDir 'D:/Applications/Visual Studio 2022'
+    //         installDir 'C:/Program Files/Microsoft Visual Studio/2022/Preview'
     //     }
     // }
     components {

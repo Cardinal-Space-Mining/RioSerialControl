@@ -4,14 +4,14 @@
 
 #include "Robot.h"
 
-#include <fmt/core.h>
+// #include <fmt/core.h>
 #include <frc/smartdashboard/SmartDashboard.h>
 #include <frc/AnalogPotentiometer.h>
-
 #include <frc/drive/DifferentialDrive.h>
 #include <frc/smartdashboard/SmartDashboard.h>
 #include <frc/DataLogManager.h>
 #include <frc/DriverStation.h>
+#include <frc/MathUtil.h>
 
 #include <chrono>
 #include <iostream>
@@ -38,11 +38,11 @@ namespace util {
 		return std::chrono::duration<double>{ system_time::now() - tp }.count();
 	}
 
-	frc::DifferentialDrive::WheelSpeeds computeWheelScalars(double x, double y, double deadzone)
+	frc::DifferentialDrive::WheelSpeeds computeWheelScalars(double x, double y, double mag_deadzone)
 	{
 		const double augmented_angle = std::atan2(x, y) + (PI / 4.0);	// x and y are inverted to make a CW "heading" angle
 		double magnitude = std::sqrt(x*x + y*y);
-		if (magnitude < 0.1) return { 0.0, 0.0 };
+		if (magnitude < mag_deadzone) return { 0.0, 0.0 };
 
 		return {
 			magnitude * std::sin(augmented_angle),
@@ -640,7 +640,7 @@ void Robot::periodic_handle_teleop_input()
 			stick_x = logitech.GetRawAxis(Robot::TELEOP_DRIVE_X_AXIS_IDX),
 			stick_y = -logitech.GetRawAxis(Robot::TELEOP_DRIVE_Y_AXIS_IDX);	// forward y is positive
 
-		auto track_speeds = util::computeWheelScalars(stick_x, stick_y, Robot::DRIVING_DEADZONE_SCALAR);
+		auto track_speeds = util::computeWheelScalars(stick_x, stick_y, Robot::DRIVING_MAGNITUDE_DEADZONE_SCALAR);
 
 		// set drive velocities
 		track_right.SetControl(
@@ -652,7 +652,7 @@ void Robot::periodic_handle_teleop_input()
 				Robot::TRACKS_MAX_VELO * this->state.driving_speed_scalar * track_speeds.left
 			));
 	}
-	// -------- TRENCHER CONTROL -------------
+	// ------------ TRENCHER CONTROL -------------
 	{
 		double trencher_speed = logitech.GetRawAxis(Robot::TELEOP_TRENCHER_SPEED_AXIS_IDX);
 		if (logitech.GetRawButton(Robot::TELEOP_TRENCHER_INVERT_BUTTON_IDX)) trencher_speed *= -1.0;
@@ -666,7 +666,7 @@ void Robot::periodic_handle_teleop_input()
 			}
 		);
 	}
-	// -------- HOPPER CONTROL -------------
+	// ------------- HOPPER CONTROL --------------
 	{
 		double hopper_belt_speed = -logitech.GetRawAxis(Robot::TELEOP_HOPPER_SPEED_AXIS_IDX);
 		if (logitech.GetRawButton(Robot::TELEOP_HOPPER_INVERT_BUTTON_IDX)) hopper_belt_speed *= -1.0;
@@ -681,7 +681,7 @@ void Robot::periodic_handle_teleop_input()
 		);
 		// set actutor power
 		hopper_actuator.Set(
-			logitech.GetRawAxis(Robot::TELEOP_HOPPER_ACTUATE_AXIS_IDX)
+			frc::ApplyDeadband(logitech.GetRawAxis(Robot::TELEOP_HOPPER_ACTUATE_AXIS_IDX), Robot::GENERIC_DEADZONE_SCALAR)
 		);
 	}
 }
@@ -727,7 +727,10 @@ void Robot::RobotInit()
 void Robot::RobotPeriodic()
 {
 	// putting this here for now
-	// this->periodic_handle_serial_control();
+	if constexpr(Robot::CT_SERIAL_ENABLED)
+	{
+		this->periodic_handle_serial_control();
+	}
 
 	// run periodic control
 	this->periodic_handle_mining();

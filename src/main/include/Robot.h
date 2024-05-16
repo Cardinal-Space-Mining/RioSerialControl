@@ -81,8 +81,7 @@ protected:
 
 private:
 	struct {
-		std::chrono::system_clock::time_point
-			last_sim_time;
+		std::chrono::system_clock::time_point last_sim_time;
 
 		double hopper_actuator_position{ 0.0 };
 
@@ -210,10 +209,11 @@ private:
 		GENERIC_MOTOR_kD = 0.0001,	// A change of 1 rotation per second squared results in 0.0001 volts output
 		GENERIC_MOTOR_kV = 0.12,	// Falcon 500 is a 500kV motor, 500rpm per V = 8.333 rps per V, 1/8.33 = 0.12 volts / Rotation per second
 	// driving
-		DRIVING_DEADZONE_SCALAR = 0.1,
+		DRIVING_MAGNITUDE_DEADZONE_SCALAR = 0.1,
 		DRIVING_LOW_SPEED_SCALAR = 0.3,
 		DRIVING_MEDIUM_SPEED_SCALAR = 0.7,
 		DRIVING_HIGH_SPEED_SCALAR = 1.0,
+		GENERIC_DEADZONE_SCALAR = 0.05,
 	// hopper
 		HOPPER_ACTUATOR_PLUNGE_SPEED = 0.65,
 		HOPPER_ACTUATOR_EXTRACT_SPEED = 0.80,
@@ -222,16 +222,13 @@ private:
 		OFFLOAD_POT_VALUE = 0.95,
 		TRAVERSAL_POT_VALUE = 0.50,
 		AUTO_TRANSPORT_POT_VALUE = 0.45,
-		MINING_POT_VALUE = 0.03;
-
-	static constexpr double
+		MINING_POT_VALUE = 0.03,
 	// timed operations
 		MINING_RUN_TIME_SECONDS = 15.0,           // teleauto mining run time
 		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3.0,   // teleauto offload duration
 		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 2.0,
-		OFFLOAD_DUMP_TIME = 6.0;
+		OFFLOAD_DUMP_TIME = 6.0,
 	// auto belt duty cycle
-	static constexpr double
 		HOPPER_BELT_TIME_ON_SECONDS = 1.0,
 		HOPPER_BELT_TIME_OFF_SECONDS = 2.5;
 
@@ -256,6 +253,9 @@ private:
 		TELEAUTO_MINING_STOP_POV = LogitechConstants::DPAD_DOWN_POV, /*Mining Stop Is Down*/
 		TELEAUTO_OFFLOAD_INIT_POV = LogitechConstants::DPAD_RIGHT_POV,  /*Offload Init Is Right*/
 		TELEAUTO_OFFLOAD_STOP_POV = LogitechConstants::DPAD_LEFT_POV;  /*Offload Stop Is Left*/
-	
+
+	static constexpr bool
+		CT_SERIAL_ENABLED = false;	// compile-time enable/disable
+
 
 };
