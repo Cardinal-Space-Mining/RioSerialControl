@@ -5,32 +5,34 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
-#include <deque>
+// #include <string>
+// #include <deque>
 
 #include <frc/TimedRobot.h>
-#include <frc/smartdashboard/SendableChooser.h>
+// #include <frc/smartdashboard/SendableChooser.h>
 #include <frc/SerialPort.h>
 #include <ctre/phoenix/motorcontrol/can/WPI_TalonSRX.h>
 #include <frc/AnalogPotentiometer.h>
-#include "frc/Joystick.h"
-#include "frc/XboxController.h"
+#include <frc/Joystick.h>
+#include <frc/XboxController.h>
 
 #include <ctre/phoenix6/TalonFX.hpp>
-#include <ctre/phoenix6/Pigeon2.hpp>
+// #include <ctre/phoenix6/Pigeon2.hpp>
+#include <ctre/phoenix6/sim/TalonFXSimState.hpp>
 #include "ctre/Phoenix.h"
 
 #include "LogitechConstants.hpp"
-#include "SenderNT.hpp"
+// #include "SenderNT.hpp"
 
 #include <wpi/sendable/SendableBuilder.h>
 
-#include "wpimath/MathShared.h"
+// #include "wpimath/MathShared.h"
 
 
 using namespace ctre::phoenix6;
 
-typedef ctre::phoenix6::hardware::TalonFX TalonFX6;
+using TalonFX6 = ctre::phoenix6::hardware::TalonFX;
+using SimTalonFX6 = ctre::phoenix6::sim::TalonFXSimState;
 
 class Robot : public frc::TimedRobot, public wpi::Sendable {
 public:
@@ -71,10 +73,62 @@ protected:
 	void periodic_handle_mining();
 	void periodic_handle_offload();
 	void periodic_handle_teleop_input();
+	void periodic_handle_simulation();
+
+protected:
+	double get_hopper_pot();
 
 
 private:
-	// state
+	struct {
+		std::chrono::system_clock::time_point
+			last_sim_time;
+
+		double hopper_actuator_position{ 0.0 };
+
+		// SimTalonFX6
+		// 	track_right,
+		// 	track_left,
+		// 	trencher,
+		// 	hopper_belt;
+
+	} sim;
+
+	struct {
+		frc::SerialPort
+			port = frc::SerialPort{
+				115200,
+				frc::SerialPort::Port::kOnboard,
+				8,
+				frc::SerialPort::Parity::kParity_None,
+				frc::SerialPort::StopBits::kStopBits_One
+			};
+		uint16_t
+			input_i{ 0 };
+		char
+			input_buffer[32];
+			
+		bool enabled = false;
+
+	} serial;
+
+	frc::Joystick
+		logitech{ 0 };
+	frc::AnalogPotentiometer
+		hopper_actuator_pot{ 0 };
+	TalonFX6
+		track_right{ 0 },
+		track_left{ 1 },
+		trencher{ 2 },
+		hopper_belt{ 3 };
+	WPI_TalonSRX
+		hopper_actuator{ 4 };
+
+	TalonFX6* motors[2] = {
+		&track_right,
+		&track_left,
+	};
+
 	class State : public wpi::Sendable{
 	public:
 		enum class MiningStage {
@@ -132,42 +186,9 @@ private:
 	};
 	State state;
 
-	struct {
-		frc::SerialPort
-			port = frc::SerialPort{
-				115200,
-				frc::SerialPort::Port::kOnboard,
-				8,
-				frc::SerialPort::Parity::kParity_None,
-				frc::SerialPort::StopBits::kStopBits_One
-			};
-		uint16_t
-			input_i{ 0 };
-		char
-			input_buffer[32];
-			
-		bool enabled = false;
-
-	} serial;
-
-	frc::Joystick
-		logitech{ 0 };
-	frc::AnalogPotentiometer
-		hopper_actuator_pot{ 0 };
-	TalonFX6
-		track_right{ 0 },
-		track_left{ 1 },
-		trencher{ 2 },
-		hopper_belt{ 3 };
-	WPI_TalonSRX
-		hopper_actuator{ 4 };
-
-	TalonFX6* motors[2] = {
-		&track_right,
-		&track_left,
-	};
-
 	// SenderNT telemetry_sender;
+
+
 
 	static constexpr auto
 	// motor physical speed targets

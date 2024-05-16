@@ -111,7 +111,8 @@ void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 
 
 
-Robot::Robot() /*: telemetry_sender{ "Robot" }*/
+Robot::Robot() //:
+	/*telemetry_sender{ "Robot" }*/
 {
 	this->serial.port.SetTimeout(units::second_t{ 0.1 });
 }
@@ -127,7 +128,7 @@ void Robot::InitSendable(wpi::SendableBuilder& builder)
 	util::add_fx6_dbg_info(builder, trencher, "Trencher");
 	util::add_fx6_dbg_info(builder, hopper_belt, "HopperBelt");
 	util::add_srx_dbg_info(builder, hopper_actuator, "HopperActuator");
-	builder.AddDoubleProperty("HopperActuator/potentiometer", [this](){ return this->hopper_actuator_pot.Get(); }, nullptr);
+	builder.AddDoubleProperty("HopperActuator/potentiometer", [this](){ return this->get_hopper_pot(); }, nullptr);
 	builder.AddBooleanProperty("state/serial_enabled", [this](){return this->serial.enabled;}, nullptr);
 
 	this->state.InitSendable(builder);
@@ -189,6 +190,15 @@ void Robot::send_serial_success()
 	static char result = 0;
 	this->serial.port.Write(&result, sizeof(result));
 	this->serial.port.Write(&XOFF, sizeof(XOFF)); // xoff, done running opcodes/commands. if panda doesnt get xoff, try opcode again
+}
+
+
+double Robot::get_hopper_pot()
+{
+	if constexpr(this->IsReal())
+		return this->hopper_actuator_pot.Get();
+	else
+		return this->sim.hopper_actuator_position;
 }
 
 
@@ -369,7 +379,7 @@ void Robot::periodic_handle_mining()
 			}
 			case Robot::State::MiningStage::LOWERING_HOPPER:
 			{
-				const double pot_val = this->hopper_actuator_pot.Get();
+				const double pot_val = this->get_hopper_pot();
 				if( pot_val > Robot::MINING_POT_VALUE && (!this->serial.enabled ||
 					this->state.mining.serial_control == Robot::State::SerialControlState::STARTED))
 				{
@@ -448,7 +458,7 @@ void Robot::periodic_handle_mining()
 			}
 			case Robot::State::MiningStage::RAISING_HOPPER:
 			{
-				const double pot_val = this->hopper_actuator_pot.Get();
+				const double pot_val = this->get_hopper_pot();
 				if(pot_val < Robot::AUTO_TRANSPORT_POT_VALUE)
 				{
 					// set trencher
@@ -522,7 +532,7 @@ void Robot::periodic_handle_offload()
 			}
 			case Robot::State::OffloadingStage::RAISING_HOPPER:
 			{
-				if(this->hopper_actuator_pot.Get() < Robot::OFFLOAD_POT_VALUE)
+				if(this->get_hopper_pot() < Robot::OFFLOAD_POT_VALUE)
 				{
 					this->hopper_actuator.Set(-Robot::HOPPER_ACUTATOR_MOVE_SPEED);	// dump
 					break;
@@ -558,7 +568,7 @@ void Robot::periodic_handle_offload()
 			}
 			case Robot::State::OffloadingStage::LOWERING_HOPPER:
 			{
-				if(this->hopper_actuator_pot.Get() > Robot::TRAVERSAL_POT_VALUE)
+				if(this->get_hopper_pot() > Robot::TRAVERSAL_POT_VALUE)
 				{
 					this->hopper_actuator.Set(Robot::HOPPER_ACUTATOR_MOVE_SPEED);
 					break;
@@ -678,6 +688,22 @@ void Robot::periodic_handle_teleop_input()
 
 
 
+void Robot::periodic_handle_simulation()
+{
+	const double dt = util::seconds_since(this->sim.last_sim_time);
+	this->sim.last_sim_time = system_time::now();
+
+	if(dt > 1e-3)
+	{
+		this->sim.hopper_actuator_position +=
+			(this->hopper_actuator.Get() * -0.114 * dt);	// 0.114 --> position / (duty cycle * seconds) -- from logs
+
+		this->sim.hopper_actuator_position = std::min(1.0, std::max(0.0, this->sim.hopper_actuator_position));
+	}
+}
+
+
+
 
 
 // -------------- TimedRobot Overrides --------------
@@ -745,7 +771,10 @@ void Robot::TestPeriodic() {}
 
 
 void Robot::SimulationInit() {}
-void Robot::SimulationPeriodic() {}
+void Robot::SimulationPeriodic()
+{
+	this->periodic_handle_simulation();
+}
 
 
 #ifndef RUNNING_FRC_TESTS
