@@ -46,6 +46,7 @@ public:
 	void AutonomousPeriodic() override;
 	void TeleopInit() override;
 	void TeleopPeriodic() override;
+	void TeleopExit() override;
 	void DisabledInit() override;
 	void DisabledPeriodic() override;
 	void TestInit() override;
@@ -55,29 +56,6 @@ public:
 
 protected:
 	void InitSendable(wpi::SendableBuilder& builder) override;
-
-	void configure_motors();
-	void disable_motors();
-	void stop_all();
-	void disable_serial();
-	void send_serial_success();
-
-protected:
-	void mining_init(bool serial = false);
-	void mining_shutdown(bool serial = false);
-	void offload_init(bool serial = false);
-	void offload_shutdown(bool serial = false);
-
-protected:
-	void periodic_handle_serial_control();
-	void periodic_handle_mining();
-	void periodic_handle_offload();
-	void periodic_handle_teleop_input();
-	void periodic_handle_simulation();
-
-protected:
-	double get_hopper_pot();
-
 
 private:
 	struct {
@@ -111,6 +89,8 @@ private:
 
 	} serial;
 
+	// SenderNT telemetry_sender;
+
 	frc::Joystick
 		logitech{ 0 };
 	frc::AnalogPotentiometer
@@ -130,6 +110,12 @@ private:
 
 	class State : public wpi::Sendable{
 	public:
+		enum class ControlLevel {
+			MANUAL = 0,
+			ASSISTED_MANUAL = 1,
+			TELEAUTO_OP = 2,
+			FULL_AUTO = 3
+		};
 		enum class MiningStage {
 			INITIALIZING = 0,
 			LOWERING_HOPPER = 1,
@@ -145,18 +131,26 @@ private:
 			LOWERING_HOPPER = 4,
 			FINISHED = 5
 		};
-		enum class SerialControlState {
-			DISABLED = 0,
-			STARTED = 1,
-			CANCELLED = 2
-		};
+		// enum class SerialControlState {
+		// 	DISABLED = 0,
+		// 	STARTED = 1,
+		// 	CANCELLED = 2
+		// };
+
 
 		double driving_speed_scalar = Robot::DRIVING_MEDIUM_SPEED_SCALAR;
 
+		ControlLevel
+			control_level = ControlLevel::ASSISTED_MANUAL,
+			last_manual_control_level = control_level;
+
 		struct {
-			bool enabled = false;
+			bool
+				enabled = false,
+				cancelled = false;
+
 			MiningStage stage = MiningStage::FINISHED;
-			SerialControlState serial_control = SerialControlState::DISABLED;
+			// SerialControlState serial_control = SerialControlState::DISABLED;
 
 			std::chrono::system_clock::time_point traversal_start_time;
 
@@ -164,9 +158,12 @@ private:
 
 		} mining;
 		struct {
-			bool enabled = false;
+			bool
+				enabled = false,
+				cancelled = false;
+
 			OffloadingStage stage = OffloadingStage::FINISHED;
-			SerialControlState serial_control = SerialControlState::DISABLED;
+			// SerialControlState serial_control = SerialControlState::DISABLED;
 
 			std::chrono::system_clock::time_point start_time, dump_start_time;
 
@@ -180,15 +177,43 @@ private:
 	public:
 		void reset_auto_states();
 
+		bool mining_is_soft_shutdown();
+		bool offload_is_soft_shutdown();
+
+		void handle_change_control_level(Robot::State::ControlLevel new_level);
+		// void set_teleauto_control();
+		// void set_assisted_control();
+
 		void InitSendable(wpi::SendableBuilder& builder) override;
 
 	};
 	State state;
 
-	// SenderNT telemetry_sender;
+
+protected:
+	void configure_motors();
+	void disable_motors();
+	void stop_all();
+	void disable_serial();
+	void send_serial_success();
+
+	double get_hopper_pot();
+
+protected:
+	void start_mining(Robot::State::ControlLevel op_level);
+	void cancel_mining();
+	void start_offload(Robot::State::ControlLevel op_level);
+	void cancel_offload();
+
+protected:
+	void periodic_handle_serial_control();
+	void periodic_handle_mining();
+	void periodic_handle_offload();
+	void periodic_handle_teleop_input();
+	void periodic_handle_simulation();
 
 
-
+public:
 	static constexpr auto
 	// motor physical speed targets
 		TRENCHER_MAX_VELO = 80_tps,
@@ -197,6 +222,7 @@ private:
 		HOPPER_BELT_MAX_MINING_VELO = 10_tps,
 		TRACKS_MAX_VELO = 125_tps,
 		TRACKS_MINING_VELO = 8_tps,
+		TRACKS_MAX_ADDITIONAL_MINING_VEL = 6_tps,
 		TRACKS_OFFLOAD_VELO = TRACKS_MAX_VELO * 0.25;
 
 	static constexpr auto
@@ -220,11 +246,11 @@ private:
 		HOPPER_ACUTATOR_MOVE_SPEED = 1.0,	// all other movement (ie. dumping)
 	// actuator potentiometer target values
 		OFFLOAD_POT_VALUE = 0.95,
-		TRAVERSAL_POT_VALUE = 0.50,
-		AUTO_TRANSPORT_POT_VALUE = 0.45,
+		TRAVERSAL_POT_VALUE = 0.60,
+		AUTO_TRANSPORT_POT_VALUE = 0.55,
 		MINING_POT_VALUE = 0.03,
 	// timed operations
-		MINING_RUN_TIME_SECONDS = 15.0,           // teleauto mining run time
+		MINING_RUN_TIME_SECONDS = 1.0,           // teleauto mining run time
 		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3.0,   // teleauto offload duration
 		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 2.0,
 		OFFLOAD_DUMP_TIME = 6.0,
@@ -249,10 +275,13 @@ private:
 		TELEOP_HOPPER_INVERT_BUTTON_IDX = LogitechConstants::LB,
 		TELEOP_HOPPER_ACTUATE_AXIS_IDX = LogitechConstants::RIGHT_JOY_Y,
 
-		TELEAUTO_MINING_INIT_POV = LogitechConstants::DPAD_UP_POV, /*Mining Init Is Up*/
-		TELEAUTO_MINING_STOP_POV = LogitechConstants::DPAD_DOWN_POV, /*Mining Stop Is Down*/
-		TELEAUTO_OFFLOAD_INIT_POV = LogitechConstants::DPAD_RIGHT_POV,  /*Offload Init Is Right*/
-		TELEAUTO_OFFLOAD_STOP_POV = LogitechConstants::DPAD_LEFT_POV;  /*Offload Stop Is Left*/
+		TELEAUTO_MINING_INIT_POV = LogitechConstants::DPAD_UP_POV,
+		TELEAUTO_MINING_STOP_POV = LogitechConstants::DPAD_DOWN_POV,
+		TELEAUTO_OFFLOAD_INIT_POV = LogitechConstants::DPAD_RIGHT_POV,
+		TELEAUTO_OFFLOAD_STOP_POV = LogitechConstants::DPAD_LEFT_POV,
+
+		ASSISTED_MINING_TOGGLE_BUTTON_IDX = LogitechConstants::LEFT_JOY_DOWN,
+		ASSISTED_OFFLOAD_TOGGLE_BUTTON_IDX = LogitechConstants::RIGHT_JOY_DOWN;
 
 	static constexpr bool
 		CT_SERIAL_ENABLED = false;	// compile-time enable/disable
