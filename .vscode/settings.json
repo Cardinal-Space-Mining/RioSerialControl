@@ -15,6 +15,7 @@
     "**/*~": true
   },
   "C_Cpp.default.configurationProvider": "vscode-wpilib",
+  "C_Cpp.errorSquiggles": "Enabled",
   "files.associations": {
     "any": "cpp",
     "array": "cpp",
