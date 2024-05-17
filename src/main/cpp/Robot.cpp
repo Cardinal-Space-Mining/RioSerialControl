@@ -813,17 +813,17 @@ void Robot::periodic_handle_traversal()
 		switch(this->state.traversal.stage) {
 			case Robot::State::TraversalStage::INITIALIZING:
 			{
-				this->state.traversal.lduration = state.traversal.lctime.front();
-				this->state.traversal.rduration = state.traversal.rctime.front();
-				this->state.traversal.lctime.pop();
-				this->state.traversal.rctime.pop();
+				this->state.traversal.lduration = state.traversal.leftTrackControltime.front();
+				this->state.traversal.rduration = state.traversal.rightTrackControltime.front();
+				this->state.traversal.leftTrackControltime.pop();
+				this->state.traversal.rightTrackControltime.pop();
 				this->state.traversal.start_time = system_time::now();
 				this->state.traversal.leftTrackStartCycleTime = system_time::now();
 				this->state.traversal.rightTrackStartCycleTime = system_time::now();
-				this->state.traversal.curLeftVelo = this->state.traversal.lcv.front();
-				this->state.traversal.curRightVelo = this->state.traversal.rcv.front();
-				this->state.traversal.lcv.pop();
-				this->state.traversal.rcv.pop();
+				this->state.traversal.curLeftVelo = this->state.traversal.leftTrackControlVelocity.front();
+				this->state.traversal.curRightVelo = this->state.traversal.rightTrackControlVelocity.front();
+				this->state.traversal.leftTrackControlVelocity.pop();
+				this->state.traversal.rightTrackControlVelocity.pop();
 				this->state.traversal.stage = Robot::State::TraversalStage::TRAVERSE;
 				// fallthrough
 				
@@ -831,14 +831,14 @@ void Robot::periodic_handle_traversal()
 			case Robot::State::TraversalStage::TRAVERSE:
 			{
 
-				if( !cancelled && (is_full_auto) && this->state.traversal.lctime.size() > 0 && this->state.traversal.rctime.size() > 0)
+				if( !cancelled && (is_full_auto) && this->state.traversal.leftTrackControltime.size() > 0 && this->state.traversal.rightTrackControltime.size() > 0)
 				{
 					if(util::seconds_since(this->state.traversal.leftTrackStartCycleTime) >= this->state.traversal.lduration){
 						this->state.traversal.leftTrackStartCycleTime = system_time::now();
-						this->state.traversal.lduration = this->state.traversal.lctime.front();
-						this->state.traversal.curLeftVelo = this->state.traversal.lcv.front();
-						this->state.traversal.lctime.pop();
-						this->state.traversal.lcv.pop();
+						this->state.traversal.lduration = this->state.traversal.leftTrackControltime.front();
+						this->state.traversal.curLeftVelo = this->state.traversal.leftTrackControlVelocity.front();
+						this->state.traversal.leftTrackControltime.pop();
+						this->state.traversal.leftTrackControlVelocity.pop();
 					
 					}
 					else{
@@ -852,10 +852,10 @@ void Robot::periodic_handle_traversal()
 					}
 					if(util::seconds_since(this->state.traversal.rightTrackStartCycleTime) >= this->state.traversal.rduration){
 						this->state.traversal.rightTrackStartCycleTime = system_time::now();
-						this->state.traversal.rduration = this->state.traversal.rctime.front();
-						this->state.traversal.curRightVelo = this->state.traversal.rcv.front();
-						this->state.traversal.rctime.pop();
-						this->state.traversal.rcv.pop();
+						this->state.traversal.rduration = this->state.traversal.rightTrackControltime.front();
+						this->state.traversal.curRightVelo = this->state.traversal.rightTrackControlVelocity.front();
+						this->state.traversal.rightTrackControltime.pop();
+						this->state.traversal.rightTrackControlVelocity.pop();
 					}
 					else{
 						ctre::phoenix6::controls::VelocityVoltage
@@ -897,14 +897,14 @@ void Robot::record_tracks()
 		units::angular_velocity::turns_per_second_t leftVelo = track_left.GetVelocity().GetValue();
 		units::angular_velocity::turns_per_second_t rightVelo = track_right.GetVelocity().GetValue();
 		if(this->state.traversal.prevLeftVelo != leftVelo){
-			this->state.traversal.lctime.push(util::seconds_since(this->state.traversal.lastLeftTrackTime));
-			this->state.traversal.lcv.push(leftVelo);
+			this->state.traversal.leftTrackControltime.push(util::seconds_since(this->state.traversal.lastLeftTrackTime));
+			this->state.traversal.leftTrackControlVelocity.push(leftVelo);
 			this->state.traversal.prevLeftVelo = leftVelo;
 			this->state.traversal.lastLeftTrackTime = system_time::now();
 		}
 		if(this->state.traversal.prevRightVelo != rightVelo){
-			this->state.traversal.rctime.push(util::seconds_since(this->state.traversal.lastRightTrackTime));
-			this->state.traversal.rcv.push(rightVelo);
+			this->state.traversal.rightTrackControltime.push(util::seconds_since(this->state.traversal.lastRightTrackTime));
+			this->state.traversal.rightTrackControlVelocity.push(rightVelo);
 			this->state.traversal.prevRightVelo = rightVelo;
 			this->state.traversal.lastRightTrackTime = system_time::now();
 		}

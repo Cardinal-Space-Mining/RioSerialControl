@@ -196,8 +196,8 @@ private:
 				leftTrackStartCycleTime,
 				rightTrackStartCycleTime;
 
-			std::queue<double> lctime;
-			std::queue<double> rctime;
+			std::queue<double> leftTrackControltime;
+			std::queue<double> rightTrackControltime;
 			double 
 				rduration,
 				lduration;
@@ -206,8 +206,8 @@ private:
 				prevRightVelo,
 				curLeftVelo,
 				curRightVelo;
-			std::queue<units::angular_velocity::turns_per_second_t> lcv;
-			std::queue<units::angular_velocity::turns_per_second_t> rcv;
+			std::queue<units::angular_velocity::turns_per_second_t> leftTrackControlVelocity;
+			std::queue<units::angular_velocity::turns_per_second_t> rightTrackControlVelocity;
 
 			double auto_traversal_time = Robot::AUTO_TRAVERSAL_TRAVERSE_TIME_SECONDS;
 
