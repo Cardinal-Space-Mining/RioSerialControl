@@ -248,7 +248,7 @@ public:
 		OFFLOAD_POT_VALUE = 0.95,
 		TRAVERSAL_POT_VALUE = 0.60,
 		AUTO_TRANSPORT_POT_VALUE = 0.55,
-		MINING_POT_VALUE = 0.03,
+		MINING_POT_VALUE = 0.03,	// need to make this "halfway" between ground and current depth
 	// timed operations
 		MINING_RUN_TIME_SECONDS = 1.0,           // teleauto mining run time
 		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3.0,   // teleauto offload duration

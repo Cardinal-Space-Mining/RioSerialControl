@@ -500,7 +500,6 @@ void Robot::periodic_handle_mining()
 				else
 				{
 					this->hopper_actuator.Set(0);
-					// if(this->state.mining.serial_control != Robot::State::SerialControlState::DISABLED) this->send_serial_success();
 					this->state.mining.traversal_start_time = system_time::now();
 					this->state.mining.stage = Robot::State::MiningStage::TRAVERSING;
 					// allow fallthrough bc we might as well start processing traversal
@@ -565,6 +564,7 @@ void Robot::periodic_handle_mining()
 				{
 					this->track_left.Set(0);
 					this->track_right.Set(0);
+					this->hopper_belt.Set(0);
 					this->state.mining.stage = Robot::State::MiningStage::RAISING_HOPPER;
 					// allow fallthrough
 				}
@@ -589,7 +589,6 @@ void Robot::periodic_handle_mining()
 				else
 				{
 					this->hopper_actuator.Set(0);
-					// if(this->state.mining.serial_control == Robot::State::SerialControlState::CANCELLED) this->send_serial_success();
 					this->state.mining.stage = Robot::State::MiningStage::FINISHED;
 					// fallthrough to call shutdown
 				}
@@ -718,7 +717,6 @@ void Robot::periodic_handle_offload()
 				else
 				{
 					this->hopper_actuator.Set(0);
-					// if(this->state.offload.serial_control != Robot::State::SerialControlState::DISABLED) this->send_serial_success();
 					this->state.offload.stage = Robot::State::OffloadingStage::FINISHED;
 					// fallthrough
 				}
