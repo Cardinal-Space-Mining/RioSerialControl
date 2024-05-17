@@ -91,6 +91,7 @@ void Robot::State::reset_auto_states()
 	this->offload.enabled = false;
 	this->mining.stage = Robot::State::MiningStage::FINISHED;
 	this->offload.stage = Robot::State::OffloadingStage::FINISHED;
+	this->traversal.stage = Robot::State::TraversalStage::FINISHED;
 }
 
 bool Robot::State::mining_is_soft_shutdown()
@@ -119,6 +120,24 @@ bool Robot::State::offload_is_soft_shutdown()
 		case Robot::State::ControlLevel::FULL_AUTO:
 		{
 			return this->offload.cancelled;
+		}
+		case Robot::State::ControlLevel::MANUAL:
+		case Robot::State::ControlLevel::TELEAUTO_OP:
+		default:
+		{
+			return false;
+		}
+	}
+}
+
+bool Robot::State::traversal_is_soft_shutdown()
+{
+	switch(this->control_level)
+	{
+		case Robot::State::ControlLevel::ASSISTED_MANUAL:
+		case Robot::State::ControlLevel::FULL_AUTO:
+		{
+			return this->traversal.cancelled;
 		}
 		case Robot::State::ControlLevel::MANUAL:
 		case Robot::State::ControlLevel::TELEAUTO_OP:
@@ -173,11 +192,18 @@ void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 		"Lowering Hopper",
 		"Finished"
 	};
+	static const char* TRAVERSAL_STAGE_NAMES[] = {
+		"Initializing",
+		"Traverse",
+		"Finished"
+	};
 
 	builder.AddBooleanProperty("state/mining_enabled", [this](){return this->mining.enabled;}, nullptr);
 	builder.AddBooleanProperty("state/mining_cancelled", [this](){return this->mining.cancelled;}, nullptr);
 	builder.AddBooleanProperty("state/offload_enabled", [this](){return this->offload.enabled;}, nullptr);
 	builder.AddBooleanProperty("state/offload_cancelled", [this](){return this->offload.cancelled;}, nullptr);
+	builder.AddBooleanProperty("state/traversal_enabled", [this](){return this->traversal.enabled;}, nullptr);
+	builder.AddBooleanProperty("state/traversal_cancelled", [this](){return this->traversal.cancelled;}, nullptr);
 	// builder.AddIntegerProperty("state/mining_stage", [this](){return static_cast<int>(this->mining.stage);}, nullptr);
 	// builder.AddIntegerProperty("state/offload_stage", [this](){return static_cast<int>(this->offload.stage);}, nullptr);
 	// builder.AddIntegerProperty("state/mining_serial_control_state", [this](){return static_cast<int>(this->mining.serial_control);}, nullptr);
@@ -188,11 +214,13 @@ void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 	builder.AddDoubleProperty("tuning/mining_runtime", [this](){return this->mining.target_mining_time;}, [this](double v){this->mining.target_mining_time = v;});
 	builder.AddDoubleProperty("tuning/tele_offload_backup_time", [this](){return this->offload.tele_target_backup_time;}, [this](double v){this->offload.tele_target_backup_time = v;});
 	builder.AddDoubleProperty("tuning/auto_offload_backup_time", [this](){return this->offload.auto_target_backup_time;}, [this](double v){this->offload.auto_target_backup_time = v;});
+	builder.AddDoubleProperty("tuning/auto_traversal_time", [this](){return this->traversal.auto_traversal_time;}, [this](double v){this->traversal.auto_traversal_time = v;});
 	builder.AddDoubleProperty("tuning/offload_dump_time", [this](){return this->offload.target_dump_time;}, [this](double v){this->offload.target_dump_time = v;});
 
 	builder.AddStringProperty("state/control_level", [this](){return CONTROL_LEVEL_NAMES[static_cast<int>(this->control_level)];}, nullptr);
 	builder.AddStringProperty("state/mining_stage", [this](){return MINING_STAGE_NAMES[static_cast<int>(this->mining.stage)];}, nullptr);
 	builder.AddStringProperty("state/offload_stage", [this](){return OFFLOAD_STAGE_NAMES[static_cast<int>(this->offload.stage)];}, nullptr);
+	builder.AddStringProperty("state/traversal_stage", [this](){return TRAVERSAL_STAGE_NAMES[static_cast<int>(this->traversal.stage)];}, nullptr);
 };
 
 
@@ -294,7 +322,7 @@ double Robot::get_hopper_pot()
 void Robot::start_mining(Robot::State::ControlLevel op_level)
 {
 	this->state.handle_change_control_level(op_level);
-	if( !this->state.mining.enabled && !this->state.offload.enabled &&
+	if( !this->state.mining.enabled && !this->state.offload.enabled && !this->state.traversal.enabled &&
 		this->state.control_level != Robot::State::ControlLevel::MANUAL)
 	{
 		this->stop_all();
@@ -307,7 +335,7 @@ void Robot::start_mining(Robot::State::ControlLevel op_level)
 
 void Robot::cancel_mining()
 {
-	if (this->state.mining.enabled && !this->state.offload.enabled)
+	if (this->state.mining.enabled && !this->state.offload.enabled && !this->state.traversal.enabled)
 	{
 		switch(this->state.control_level)
 		{
@@ -333,7 +361,7 @@ void Robot::cancel_mining()
 void Robot::start_offload(Robot::State::ControlLevel op_level)
 {
 	this->state.handle_change_control_level(op_level);
-	if( !this->state.mining.enabled && !this->state.offload.enabled &&
+	if( !this->state.mining.enabled && !this->state.offload.enabled && !this->state.traversal.enabled &&
 		this->state.control_level != Robot::State::ControlLevel::MANUAL)
 	{
 		this->stop_all();
@@ -346,7 +374,7 @@ void Robot::start_offload(Robot::State::ControlLevel op_level)
 
 void Robot::cancel_offload()
 {
-	if(this->state.offload.enabled && !this->state.mining.enabled)
+	if(this->state.offload.enabled && !this->state.mining.enabled && !this->state.traversal.enabled)
 	{
 		switch(this->state.control_level)
 		{
@@ -364,6 +392,44 @@ void Robot::cancel_offload()
 
 				this->state.offload.enabled = false;
 				this->state.offload.stage = Robot::State::OffloadingStage::FINISHED;
+			}
+		}
+	}
+}
+
+void Robot::start_traversal(Robot::State::ControlLevel op_level)
+{
+	this->state.handle_change_control_level(op_level);
+	if( !this->state.mining.enabled && !this->state.offload.enabled && !this->state.traversal.enabled &&
+		this->state.control_level != Robot::State::ControlLevel::MANUAL)
+	{
+		this->stop_all();
+
+		this->state.traversal.enabled = true;
+		this->state.traversal.cancelled = false;
+		this->state.traversal.stage = Robot::State::TraversalStage::INITIALIZING;
+	}
+}
+
+void Robot::cancel_traversal()
+{
+	if(this->state.traversal.enabled && !this->state.mining.enabled && !this->state.offload.enabled)
+	{
+		switch(this->state.control_level)
+		{
+			case Robot::State::ControlLevel::FULL_AUTO:
+			{
+				this->state.traversal.cancelled = true;	// trigger automated exit
+				break;
+			}
+			case Robot::State::ControlLevel::MANUAL:
+			case Robot::State::ControlLevel::TELEAUTO_OP:
+			default:
+			{
+				this->stop_all();			// hard stop... and reset all states
+
+				this->state.traversal.enabled = false;
+				this->state.traversal.stage = Robot::State::TraversalStage::FINISHED;
 			}
 		}
 	}
@@ -736,6 +802,61 @@ void Robot::periodic_handle_offload()
 }
 
 
+void Robot::periodic_handle_traversal()
+{
+	if(this->state.traversal.enabled) {
+		const bool
+			is_full_auto = this->state.control_level == Robot::State::ControlLevel::FULL_AUTO,
+			cancelled = this->state.traversal_is_soft_shutdown();
+
+
+		switch(this->state.traversal.stage) {
+			case Robot::State::TraversalStage::INITIALIZING:
+			{
+				this->state.traversal.start_time = system_time::now();
+				this->state.traversal.stage = Robot::State::TraversalStage::TRAVERSE;
+				// fallthrough
+				
+			}
+			case Robot::State::TraversalStage::TRAVERSE:
+			{
+				const double duration = util::seconds_since(this->state.traversal.start_time);
+				if( !cancelled &&
+					(is_full_auto && duration < this->state.traversal.auto_traversal_time))
+				{
+					ctre::phoenix6::controls::VelocityVoltage
+						vel_command{
+							Robot::TRACKS_TRAVERSAL_VELO,
+							Robot::MOTOR_SETPOINT_ACC,
+							false
+						};
+					track_left.SetControl(vel_command);
+					track_right.SetControl(vel_command);
+
+					break;
+				}
+				else
+				{
+					track_left.Set(0);
+					track_right.Set(0);
+					// fallthrough to apply next stage
+				}
+			}
+			case Robot::State::TraversalStage::FINISHED:
+			{
+				this->stop_all();
+				this->state.traversal.enabled = false;
+				this->state.handle_change_control_level(Robot::State::ControlLevel::MANUAL);
+			}
+			default:
+			{
+				// nothing
+			}
+		}
+	}
+}
+
+
 
 void Robot::periodic_handle_teleop_input()
 {
@@ -747,13 +868,15 @@ void Robot::periodic_handle_teleop_input()
 		this->state.last_manual_control_level = this->state.control_level;
 		this->cancel_mining();
 		this->cancel_offload();
+		this->cancel_traversal();
 		// this->disable_serial();	// resets internal serial_control states
 	}
 
 	const bool
 		is_mining = this->state.mining.enabled,
 		is_offload = this->state.offload.enabled,
-		any_ops_running = is_mining || is_offload,
+		is_traversal = this->state.traversal.enabled,
+		any_ops_running = is_mining || is_offload || is_traversal,
 		is_teleauto = this->state.control_level == Robot::State::ControlLevel::TELEAUTO_OP;
 
 	// ---------- TELEAUTO CONTROl ----------
@@ -769,6 +892,9 @@ void Robot::periodic_handle_teleop_input()
 		} else
 		if(is_teleauto && is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
 			this->cancel_mining();
+		}
+		if(!any_ops_running && logitech.GetRawButtonPressed(Robot::TELEOP_HOPPER_INVERT_BUTTON_IDX)){ //left bumper
+			this->start_traversal(Robot::State::ControlLevel::TELEAUTO_OP);
 		}
 	}
 
@@ -836,7 +962,7 @@ void Robot::periodic_handle_teleop_input()
 	// ------------- HOPPER CONTROL --------------
 	{
 		double hopper_belt_speed = -logitech.GetRawAxis(Robot::TELEOP_HOPPER_SPEED_AXIS_IDX);
-		if (logitech.GetRawButton(Robot::TELEOP_HOPPER_INVERT_BUTTON_IDX)) hopper_belt_speed *= -1.0;
+		// if (logitech.GetRawButton(Robot::TELEOP_HOPPER_INVERT_BUTTON_IDX)) hopper_belt_speed *= -1.0;
 
 		// set hopper belt
 		hopper_belt.SetControl(

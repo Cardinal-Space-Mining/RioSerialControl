@@ -131,6 +131,11 @@ private:
 			LOWERING_HOPPER = 4,
 			FINISHED = 5
 		};
+		enum class TraversalStage {
+			INITIALIZING = 0,
+			TRAVERSE = 1,
+			FINISHED = 2
+		};
 		// enum class SerialControlState {
 		// 	DISABLED = 0,
 		// 	STARTED = 1,
@@ -173,12 +178,26 @@ private:
 				target_dump_time = Robot::OFFLOAD_DUMP_TIME;
 
 		} offload;
+		struct {
+			bool
+				enabled = false,
+				cancelled = false;
+
+			TraversalStage stage = TraversalStage::FINISHED;
+			// SerialControlState serial_control = SerialControlState::DISABLED;
+
+			std::chrono::system_clock::time_point start_time;
+
+			double auto_traversal_time = Robot::AUTO_TRAVERSAL_TRAVERSE_TIME_SECONDS;
+
+		} traversal;
 
 	public:
 		void reset_auto_states();
 
 		bool mining_is_soft_shutdown();
 		bool offload_is_soft_shutdown();
+		bool traversal_is_soft_shutdown();
 
 		void handle_change_control_level(Robot::State::ControlLevel new_level);
 		// void set_teleauto_control();
@@ -204,11 +223,14 @@ protected:
 	void cancel_mining();
 	void start_offload(Robot::State::ControlLevel op_level);
 	void cancel_offload();
+	void start_traversal(Robot::State::ControlLevel op_level);
+	void cancel_traversal();
 
 protected:
 	void periodic_handle_serial_control();
 	void periodic_handle_mining();
 	void periodic_handle_offload();
+	void periodic_handle_traversal();
 	void periodic_handle_teleop_input();
 	void periodic_handle_simulation();
 
@@ -223,7 +245,9 @@ public:
 		TRACKS_MAX_VELO = 125_tps,
 		TRACKS_MINING_VELO = 8_tps,
 		TRACKS_MAX_ADDITIONAL_MINING_VEL = 6_tps,
-		TRACKS_OFFLOAD_VELO = TRACKS_MAX_VELO * 0.25;
+		TRACKS_OFFLOAD_VELO = TRACKS_MAX_VELO * 0.25,
+		TRACKS_TRAVERSAL_VELO = TRACKS_MAX_VELO * 0.6;
+		
 
 	static constexpr auto
 		MOTOR_SETPOINT_ACC = 5_tr_per_s_sq;
@@ -253,6 +277,7 @@ public:
 		MINING_RUN_TIME_SECONDS = 1.0,           // teleauto mining run time
 		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3.0,   // teleauto offload duration
 		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 2.0,
+		AUTO_TRAVERSAL_TRAVERSE_TIME_SECONDS = 10.0,
 		OFFLOAD_DUMP_TIME = 6.0,
 	// auto belt duty cycle
 		HOPPER_BELT_TIME_ON_SECONDS = 1.0,
