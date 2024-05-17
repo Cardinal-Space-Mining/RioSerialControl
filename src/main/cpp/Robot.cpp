@@ -813,26 +813,61 @@ void Robot::periodic_handle_traversal()
 		switch(this->state.traversal.stage) {
 			case Robot::State::TraversalStage::INITIALIZING:
 			{
+				this->state.traversal.lduration = state.traversal.lctime.front();
+				this->state.traversal.rduration = state.traversal.rctime.front();
+				this->state.traversal.lctime.pop();
+				this->state.traversal.rctime.pop();
 				this->state.traversal.start_time = system_time::now();
+				this->state.traversal.leftTrackStartCycleTime = system_time::now();
+				this->state.traversal.rightTrackStartCycleTime = system_time::now();
+				this->state.traversal.curLeftVelo = this->state.traversal.lcv.front();
+				this->state.traversal.curRightVelo = this->state.traversal.rcv.front();
+				this->state.traversal.lcv.pop();
+				this->state.traversal.rcv.pop();
 				this->state.traversal.stage = Robot::State::TraversalStage::TRAVERSE;
 				// fallthrough
 				
 			}
 			case Robot::State::TraversalStage::TRAVERSE:
 			{
-				const double duration = util::seconds_since(this->state.traversal.start_time);
-				if( !cancelled &&
-					(is_full_auto && duration < this->state.traversal.auto_traversal_time))
+
+				if( !cancelled && (is_full_auto) && this->state.traversal.lctime.size() > 0 && this->state.traversal.rctime.size() > 0)
 				{
-					ctre::phoenix6::controls::VelocityVoltage
-						vel_command{
-							Robot::TRACKS_TRAVERSAL_VELO,
+					if(util::seconds_since(this->state.traversal.leftTrackStartCycleTime) >= this->state.traversal.lduration){
+						this->state.traversal.leftTrackStartCycleTime = system_time::now();
+						this->state.traversal.lduration = this->state.traversal.lctime.front();
+						this->state.traversal.curLeftVelo = this->state.traversal.lcv.front();
+						this->state.traversal.lctime.pop();
+						this->state.traversal.lcv.pop();
+					
+					}
+					else{
+						ctre::phoenix6::controls::VelocityVoltage
+						vel_command_left{
+							this->state.traversal.curLeftVelo,
 							Robot::MOTOR_SETPOINT_ACC,
 							false
 						};
-					track_left.SetControl(vel_command);
-					track_right.SetControl(vel_command);
+						track_left.SetControl(vel_command_left);
+					}
+					if(util::seconds_since(this->state.traversal.rightTrackStartCycleTime) >= this->state.traversal.rduration){
+						this->state.traversal.rightTrackStartCycleTime = system_time::now();
+						this->state.traversal.rduration = this->state.traversal.rctime.front();
+						this->state.traversal.curRightVelo = this->state.traversal.rcv.front();
+						this->state.traversal.rctime.pop();
+						this->state.traversal.rcv.pop();
+					}
+					else{
+						ctre::phoenix6::controls::VelocityVoltage
+						vel_command_right{
+							this->state.traversal.curRightVelo,
+							Robot::MOTOR_SETPOINT_ACC,
+							false
+						};
+						track_right.SetControl(vel_command_right);
+					}
 
+		
 					break;
 				}
 				else
@@ -852,6 +887,26 @@ void Robot::periodic_handle_traversal()
 			{
 				// nothing
 			}
+		}
+	}
+}
+
+void Robot::record_tracks()
+{
+	if(this->state.traversal.start_recording){
+		units::angular_velocity::turns_per_second_t leftVelo = track_left.GetVelocity().GetValue();
+		units::angular_velocity::turns_per_second_t rightVelo = track_right.GetVelocity().GetValue();
+		if(this->state.traversal.prevLeftVelo != leftVelo){
+			this->state.traversal.lctime.push(util::seconds_since(this->state.traversal.lastLeftTrackTime));
+			this->state.traversal.lcv.push(leftVelo);
+			this->state.traversal.prevLeftVelo = leftVelo;
+			this->state.traversal.lastLeftTrackTime = system_time::now();
+		}
+		if(this->state.traversal.prevRightVelo != rightVelo){
+			this->state.traversal.rctime.push(util::seconds_since(this->state.traversal.lastRightTrackTime));
+			this->state.traversal.rcv.push(rightVelo);
+			this->state.traversal.prevRightVelo = rightVelo;
+			this->state.traversal.lastRightTrackTime = system_time::now();
 		}
 	}
 }
@@ -894,7 +949,15 @@ void Robot::periodic_handle_teleop_input()
 			this->cancel_mining();
 		}
 		if(!any_ops_running && logitech.GetRawButtonPressed(Robot::TELEOP_HOPPER_INVERT_BUTTON_IDX)){ //left bumper
-			this->start_traversal(Robot::State::ControlLevel::TELEAUTO_OP);
+			if(!this->state.traversal.start_recording){
+				this->state.traversal.start_recording = true;
+			}
+			else{
+				this->state.traversal.start_recording = false;
+			}
+		}
+		if(!any_ops_running && logitech.GetRawButtonPressed(LogitechConstants::BUTTON_START)){
+			this->start_traversal(Robot::State::ControlLevel::FULL_AUTO);
 		}
 	}
 
@@ -1053,6 +1116,7 @@ void Robot::TeleopInit()
 void Robot::TeleopPeriodic()
 {
 	this->periodic_handle_teleop_input();
+	this->record_tracks();
 }
 
 void Robot::TeleopExit()

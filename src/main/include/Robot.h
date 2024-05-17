@@ -25,7 +25,7 @@
 // #include "SenderNT.hpp"
 
 #include <wpi/sendable/SendableBuilder.h>
-
+#include <queue>
 // #include "wpimath/MathShared.h"
 
 
@@ -53,6 +53,8 @@ public:
 	void TestPeriodic() override;
 	void SimulationInit() override;
 	void SimulationPeriodic() override;
+	void record_tracks();
+
 
 protected:
 	void InitSendable(wpi::SendableBuilder& builder) override;
@@ -181,12 +183,31 @@ private:
 		struct {
 			bool
 				enabled = false,
-				cancelled = false;
+				cancelled = false,
+				start_recording = false;
 
 			TraversalStage stage = TraversalStage::FINISHED;
 			// SerialControlState serial_control = SerialControlState::DISABLED;
 
-			std::chrono::system_clock::time_point start_time;
+			std::chrono::system_clock::time_point 
+				start_time,
+				lastLeftTrackTime,
+				lastRightTrackTime,
+				leftTrackStartCycleTime,
+				rightTrackStartCycleTime;
+
+			std::queue<double> lctime;
+			std::queue<double> rctime;
+			double 
+				rduration,
+				lduration;
+			units::angular_velocity::turns_per_second_t
+				prevLeftVelo,
+				prevRightVelo,
+				curLeftVelo,
+				curRightVelo;
+			std::queue<units::angular_velocity::turns_per_second_t> lcv;
+			std::queue<units::angular_velocity::turns_per_second_t> rcv;
 
 			double auto_traversal_time = Robot::AUTO_TRAVERSAL_TRAVERSE_TIME_SECONDS;
 
