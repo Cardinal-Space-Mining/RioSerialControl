@@ -232,6 +232,7 @@ void Robot::configure_motors()
 	generic_config.Slot0.kI = Robot::GENERIC_MOTOR_kI;
 	generic_config.Slot0.kD = Robot::GENERIC_MOTOR_kD;
 	generic_config.Slot0.kV = Robot::GENERIC_MOTOR_kV;
+	generic_config.MotorOutput.NeutralMode = ctre::phoenix6::signals::NeutralModeValue::Brake;
 
 	// tracks_config.CurrentLimits.StatorCurrentLimitEnable = false;
 	generic_config.CurrentLimits.StatorCurrentLimitEnable = false;
@@ -479,12 +480,12 @@ void Robot::periodic_handle_mining()
 			case Robot::State::MiningStage::LOWERING_HOPPER:
 			{
 				const double pot_val = this->get_hopper_pot();
-				if(!cancelled && pot_val > Robot::MINING_POT_VALUE)
+				if(!cancelled && pot_val > Robot::MINING_DEPTH_NOMINAL_POT_VALUE)
 				{
 					// set trencher
 					this->trencher.SetControl(
 						ctre::phoenix6::controls::VelocityVoltage{
-							Robot::TRENCHER_MINING_VELO,
+							Robot::TRENCHER_NOMINAL_MINING_VELO,
 							Robot::MOTOR_SETPOINT_ACC,
 							false
 						}
@@ -510,18 +511,74 @@ void Robot::periodic_handle_mining()
 				if( !cancelled && (this->state.control_level == Robot::State::ControlLevel::ASSISTED_MANUAL ||
 					util::seconds_since(this->state.mining.traversal_start_time) < this->state.mining.target_mining_time))
 				{
+					auto trencher_setpt = Robot::TRENCHER_NOMINAL_MINING_VELO;
+					auto tracks_setpt = Robot::TRACKS_MINING_VELO;
+					// handle manual adjustments
+					if(this->state.control_level == Robot::State::ControlLevel::ASSISTED_MANUAL)
+					{
+						// adjust trencher speed (slows down)
+						{
+							const double adjustment_raw =
+								frc::ApplyDeadband(
+									this->logitech.GetRawAxis(Robot::TELEOP_TRENCHER_SPEED_AXIS_IDX),
+									Robot::GENERIC_DEADZONE_SCALAR
+								);
+
+							trencher_setpt = Robot::TRENCHER_NOMINAL_MINING_VELO * (1.0 - adjustment_raw);
+						}
+						// adjust trencher depth with right stick -- WARNING: DEPENDS ON POTENTIOMENTER
+						{
+							double target_depth = Robot::MINING_DEPTH_NOMINAL_POT_VALUE;
+							const double adjustment_raw =
+								frc::ApplyDeadband(
+									-this->logitech.GetRawAxis(Robot::TELEOP_HOPPER_ACTUATE_AXIS_IDX),
+									Robot::GENERIC_DEADZONE_SCALAR
+								);
+
+							if(adjustment_raw > 0.0)
+								target_depth += (Robot::AUTO_TRANSPORT_POT_VALUE - Robot::MINING_DEPTH_NOMINAL_POT_VALUE) * adjustment_raw;
+							if(adjustment_raw < 0.0)
+								target_depth += (Robot::MINING_DEPTH_NOMINAL_POT_VALUE - Robot::MINING_DEPTH_LIMIT_POT_VALUE) * adjustment_raw;
+
+							// servo based on target
+							const double pot_val = this->get_hopper_pot();
+							if(std::abs(target_depth - pot_val) < Robot::HOPPER_POT_TARGETING_EPSILON)	// in range
+								this->hopper_actuator.Set(0);
+							else if(pot_val < target_depth)
+								this->hopper_actuator.Set(-Robot::HOPPER_ACTUATOR_PLUNGE_SPEED);	// negative speed to go up (obviously we should just invert the controller but I just don't want to break anything at this point)
+							else if(pot_val > target_depth)
+								this->hopper_actuator.Set(Robot::HOPPER_ACTUATOR_PLUNGE_SPEED);		// positive speed to go down
+						}
+						// adjust tracks speed
+						{
+							const double adjustment_raw =
+								frc::ApplyDeadband(
+									-this->logitech.GetRawAxis(Robot::TELEOP_DRIVE_Y_AXIS_IDX),
+									Robot::DRIVING_MAGNITUDE_DEADZONE_SCALAR
+								);
+
+							if(adjustment_raw > 0.0)
+								tracks_setpt += (Robot::TRACKS_MAX_ADDITIONAL_MINING_VEL * adjustment_raw);
+							if(adjustment_raw < 0.0)
+								tracks_setpt += (Robot::TRACKS_MINING_VELO * adjustment_raw);
+						}
+					}
+
 					// set trencher
 					this->trencher.SetControl(
 						ctre::phoenix6::controls::VelocityVoltage{
-							Robot::TRENCHER_MINING_VELO,
+							trencher_setpt,
 							Robot::MOTOR_SETPOINT_ACC,
 							false
 						}
 					);
 
-					// handle hopper duty cycle
-					const bool run_hopper = std::abs(std::fmod(util::seconds_since(state.offload.start_time), Robot::HOPPER_BELT_TIME_ON_SECONDS + Robot::HOPPER_BELT_TIME_OFF_SECONDS)) < Robot::HOPPER_BELT_TIME_ON_SECONDS;
-					if(run_hopper)
+					// handle hopper duty cycle -- scaled by trencher relative velocity --> did not work :(
+					// const double trencher_percent = trencher_setpt / Robot::TRENCHER_NOMINAL_MINING_VELO;
+					// if( trencher_percent != 0.0 && Robot::HOPPER_BELT_TIME_ON_SECONDS > std::abs(
+					// 		std::fmod( util::seconds_since(state.offload.start_time), (Robot::HOPPER_BELT_TIME_ON_SECONDS / trencher_percent) + Robot::HOPPER_BELT_TIME_OFF_SECONDS)) )
+					if( Robot::HOPPER_BELT_TIME_ON_SECONDS * (trencher_setpt / Robot::TRENCHER_NOMINAL_MINING_VELO) >
+						std::abs(std::fmod( util::seconds_since(state.offload.start_time), Robot::HOPPER_BELT_TIME_ON_SECONDS + Robot::HOPPER_BELT_TIME_OFF_SECONDS)) )
 					{
 						ctre::phoenix6::controls::VelocityVoltage
 						vel_command{
@@ -533,25 +590,10 @@ void Robot::periodic_handle_mining()
 					}
 					else this->hopper_belt.Set(0);
 
-					// compute tracks speed (when in assisted mode)
-					auto vel_setpt = Robot::TRACKS_MINING_VELO;
-					if(this->state.control_level == Robot::State::ControlLevel::ASSISTED_MANUAL)
-					{
-						const double adjustment_raw =
-							frc::ApplyDeadband(
-								-this->logitech.GetRawAxis(Robot::TELEOP_DRIVE_Y_AXIS_IDX),
-								Robot::DRIVING_MAGNITUDE_DEADZONE_SCALAR
-							);
-
-						if(adjustment_raw > 0.0)
-							vel_setpt += (Robot::TRACKS_MAX_ADDITIONAL_MINING_VEL * adjustment_raw);
-						if(adjustment_raw < 0.0)
-							vel_setpt += (Robot::TRACKS_MINING_VELO * adjustment_raw);
-					}
 					// set tracks
 					ctre::phoenix6::controls::VelocityVoltage
 						vel_command{
-							vel_setpt,
+							tracks_setpt,
 							Robot::MOTOR_SETPOINT_ACC,
 							false
 						};
@@ -577,7 +619,7 @@ void Robot::periodic_handle_mining()
 					// set trencher
 					this->trencher.SetControl(
 						ctre::phoenix6::controls::VelocityVoltage{
-							Robot::TRENCHER_MINING_VELO,
+							Robot::TRENCHER_NOMINAL_MINING_VELO,
 							Robot::MOTOR_SETPOINT_ACC,
 							false
 						}
@@ -597,7 +639,7 @@ void Robot::periodic_handle_mining()
 			{
 				this->stop_all();
 				this->state.mining.enabled = false;
-				this->state.handle_change_control_level(Robot::State::ControlLevel::MANUAL);
+				this->state.handle_change_control_level(Robot::State::ControlLevel::MANUAL);	// TODO: needs to change for full auto?
 			}
 			default:
 			{
@@ -615,12 +657,13 @@ void Robot::periodic_handle_offload()
 			is_assisted = this->state.control_level == Robot::State::ControlLevel::ASSISTED_MANUAL,
 			cancelled = this->state.offload_is_soft_shutdown();
 
-		if(is_assisted)	// control the tracks manually if in auto assist
+		// control the tracks manually if in auto assist
+		if(is_assisted)
 		{
 			// control tracks
 			ctre::phoenix6::controls::VelocityVoltage
 				vel_command{
-					(Robot::TRACKS_MAX_VELO * this->state.driving_speed_scalar) *
+					(Robot::TRACKS_MAX_VELO * Robot::DRIVING_LOW_SPEED_SCALAR * this->state.driving_speed_scalar) *
 						frc::ApplyDeadband(
 							-this->logitech.GetRawAxis(Robot::TELEOP_DRIVE_Y_AXIS_IDX),
 							Robot::DRIVING_MAGNITUDE_DEADZONE_SCALAR
@@ -725,7 +768,7 @@ void Robot::periodic_handle_offload()
 			{
 				this->stop_all();
 				this->state.offload.enabled = false;
-				this->state.handle_change_control_level(Robot::State::ControlLevel::MANUAL);
+				this->state.handle_change_control_level(Robot::State::ControlLevel::MANUAL);	// TODO: needs to change for full auto?
 			}
 			default:
 			{
@@ -739,14 +782,26 @@ void Robot::periodic_handle_offload()
 
 void Robot::periodic_handle_teleop_input()
 {
-	// ------------ HARD RESET ------------
-	if(logitech.GetRawButtonPressed(Robot::DISABLE_ALL_ACTIONS_BUTTON_IDX))
+	// speed changes -- these don't affect autos so we can run them during every loop to make it as intuitive as possible
 	{
-		// this->stop_all();	// gets called later
+		if(logitech.GetRawButtonPressed(Robot::TELEOP_LOW_SPEED_BUTTON_IDX))
+			this->state.driving_speed_scalar = Robot::DRIVING_LOW_SPEED_SCALAR;
+		if(logitech.GetRawButtonPressed(Robot::TELEOP_MEDIUM_SPEED_BUTTON_IDX))
+			this->state.driving_speed_scalar = Robot::DRIVING_MEDIUM_SPEED_SCALAR;
+		if(logitech.GetRawButtonPressed(Robot::TELEOP_HIGH_SPEED_BUTTON_IDX))
+			this->state.driving_speed_scalar = Robot::DRIVING_HIGH_SPEED_SCALAR;
+	}
+
+	// ------------ HARD RESET ------------
+	if( logitech.GetRawButton(Robot::DISABLE_ALL_ACTIONS_BUTTON_IDX) /*||
+		logitech.GetRawButtonPressed(Robot::DISABLE_ALL_ACTIONS_BUTTON_IDX)*/)	// little sus but should handle all presses
+	{
+		this->stop_all();	// gets called later
 		this->state.control_level = Robot::State::ControlLevel::MANUAL;
 		this->state.last_manual_control_level = this->state.control_level;
 		this->cancel_mining();
 		this->cancel_offload();
+		return;
 		// this->disable_serial();	// resets internal serial_control states
 	}
 
@@ -773,7 +828,7 @@ void Robot::periodic_handle_teleop_input()
 	}
 
 	// -------------- ASSISTED CONTROL ------------
-	if(!this->state.offload.enabled && logitech.GetRawButtonPressed(Robot::ASSISTED_MINING_TOGGLE_BUTTON_IDX))
+	if(logitech.GetRawButtonPressed(Robot::ASSISTED_MINING_TOGGLE_BUTTON_IDX) && !this->state.offload.enabled)
 	{
 		if(this->state.mining.enabled)
 		{
@@ -782,7 +837,7 @@ void Robot::periodic_handle_teleop_input()
 		}
 		else this->start_mining(Robot::State::ControlLevel::ASSISTED_MANUAL);
 	} else
-	if(!this->state.mining.enabled && logitech.GetRawButtonPressed(Robot::ASSISTED_OFFLOAD_TOGGLE_BUTTON_IDX))
+	if(logitech.GetRawButtonPressed(Robot::ASSISTED_OFFLOAD_TOGGLE_BUTTON_IDX) && !this->state.mining.enabled)
 	{
 		if(this->state.offload.enabled)
 		{
@@ -796,11 +851,6 @@ void Robot::periodic_handle_teleop_input()
 
 	// ------- DRIVE CONTROL ------------
 	{
-		// handle driving speed updates
-		if(logitech.GetRawButtonPressed(Robot::TELEOP_LOW_SPEED_BUTTON_IDX)) this->state.driving_speed_scalar = Robot::DRIVING_LOW_SPEED_SCALAR;
-		if(logitech.GetRawButtonPressed(Robot::TELEOP_MEDIUM_SPEED_BUTTON_IDX)) this->state.driving_speed_scalar = Robot::DRIVING_MEDIUM_SPEED_SCALAR;
-		if(logitech.GetRawButtonPressed(Robot::TELEOP_HIGH_SPEED_BUTTON_IDX)) this->state.driving_speed_scalar = Robot::DRIVING_HIGH_SPEED_SCALAR;
-
 		ctre::phoenix6::controls::VelocityVoltage
 			vel_command{ 0_tps, Robot::MOTOR_SETPOINT_ACC, false };
 		const double
@@ -863,7 +913,7 @@ void Robot::periodic_handle_simulation()
 	if(dt > 1e-3)
 	{
 		this->sim.hopper_actuator_position +=
-			(this->hopper_actuator.Get() * -0.114 * dt);	// 0.114 --> position / (duty cycle * seconds) -- from logs
+			(this->hopper_actuator.Get() * -0.114 * dt);	// 0.114 --> position / (duty cycle * seconds) -- determined from logs
 
 		this->sim.hopper_actuator_position = std::min(1.0, std::max(0.0, this->sim.hopper_actuator_position));
 	}

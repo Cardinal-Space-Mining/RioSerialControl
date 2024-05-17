@@ -216,8 +216,8 @@ protected:
 public:
 	static constexpr auto
 	// motor physical speed targets
-		TRENCHER_MAX_VELO = 80_tps,
-		TRENCHER_MINING_VELO = 80_tps,
+		TRENCHER_MAX_VELO = 80_tps,				// maximum mining speed
+		TRENCHER_NOMINAL_MINING_VELO = 80_tps,	// base trenching speed
 		HOPPER_BELT_MAX_VELO = 45_tps,
 		HOPPER_BELT_MAX_MINING_VELO = 10_tps,
 		TRACKS_MAX_VELO = 125_tps,
@@ -241,17 +241,19 @@ public:
 		DRIVING_HIGH_SPEED_SCALAR = 1.0,
 		GENERIC_DEADZONE_SCALAR = 0.05,
 	// hopper
-		HOPPER_ACTUATOR_PLUNGE_SPEED = 0.65,
+		HOPPER_ACTUATOR_PLUNGE_SPEED = 0.40,
 		HOPPER_ACTUATOR_EXTRACT_SPEED = 0.80,
 		HOPPER_ACUTATOR_MOVE_SPEED = 1.0,	// all other movement (ie. dumping)
 	// actuator potentiometer target values
-		OFFLOAD_POT_VALUE = 0.95,
-		TRAVERSAL_POT_VALUE = 0.60,
-		AUTO_TRANSPORT_POT_VALUE = 0.55,
-		MINING_POT_VALUE = 0.03,	// need to make this "halfway" between ground and current depth
+		OFFLOAD_POT_VALUE = 0.95,				// dump height
+		TRAVERSAL_POT_VALUE = 0.60,				// traversal height
+		AUTO_TRANSPORT_POT_VALUE = 0.55,		// height for transporting regolith
+		MINING_DEPTH_NOMINAL_POT_VALUE = 0.21,	// nominal mining depth from which manual adjustments can be made
+		MINING_DEPTH_LIMIT_POT_VALUE = 0.03,	// lowest depth we ever want to go
+		HOPPER_POT_TARGETING_EPSILON = 0.01,
 	// timed operations
-		MINING_RUN_TIME_SECONDS = 1.0,           // teleauto mining run time
-		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3.0,   // teleauto offload duration
+		MINING_RUN_TIME_SECONDS = 1.0,				// teleauto mining run time
+		TELE_OFFLOAD_BACKUP_TIME_SECONDS = 3.0,		// teleauto offload duration
 		AUTO_OFFLOAD_BACKUP_TIME_SECONDS = 2.0,
 		OFFLOAD_DUMP_TIME = 6.0,
 	// auto belt duty cycle

@@ -1,5 +1,9 @@
  x constants
- - recovery from erroneous states
+ ? recovery from erroneous states
  X configure hopper actuator
  X hopper increment for teleauto mining
- - add move forward at the end of offload
+ ? add move forward at the end of offload
+
+ x 60% mining plunge speed
+ x handle holding A down
+ ? Heise approved mining depth
