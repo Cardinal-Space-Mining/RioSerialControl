@@ -53,7 +53,6 @@ public:
 	void TestPeriodic() override;
 	void SimulationInit() override;
 	void SimulationPeriodic() override;
-	void record_tracks();
 
 
 protected:
@@ -218,11 +217,8 @@ private:
 
 		bool mining_is_soft_shutdown();
 		bool offload_is_soft_shutdown();
-		bool traversal_is_soft_shutdown();
 
 		void handle_change_control_level(Robot::State::ControlLevel new_level);
-		// void set_teleauto_control();
-		// void set_assisted_control();
 
 		void InitSendable(wpi::SendableBuilder& builder) override;
 
@@ -244,7 +240,7 @@ protected:
 	void cancel_mining();
 	void start_offload(Robot::State::ControlLevel op_level);
 	void cancel_offload();
-	void start_traversal(Robot::State::ControlLevel op_level);
+	void start_traversal();
 	void cancel_traversal();
 
 protected:
@@ -252,6 +248,7 @@ protected:
 	void periodic_handle_mining();
 	void periodic_handle_offload();
 	void periodic_handle_traversal();
+	void periodic_handle_record_tracks();
 	void periodic_handle_teleop_input();
 	void periodic_handle_simulation();
 

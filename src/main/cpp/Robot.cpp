@@ -130,24 +130,6 @@ bool Robot::State::offload_is_soft_shutdown()
 	}
 }
 
-bool Robot::State::traversal_is_soft_shutdown()
-{
-	switch(this->control_level)
-	{
-		case Robot::State::ControlLevel::ASSISTED_MANUAL:
-		case Robot::State::ControlLevel::FULL_AUTO:
-		{
-			return this->traversal.cancelled;
-		}
-		case Robot::State::ControlLevel::MANUAL:
-		case Robot::State::ControlLevel::TELEAUTO_OP:
-		default:
-		{
-			return false;
-		}
-	}
-}
-
 void Robot::State::handle_change_control_level(Robot::State::ControlLevel new_level)
 {
 	switch(this->control_level)	// make this more sophisticated in the future
@@ -198,17 +180,20 @@ void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 		"Finished"
 	};
 
-	builder.AddBooleanProperty("state/mining_enabled", [this](){return this->mining.enabled;}, nullptr);
-	builder.AddBooleanProperty("state/mining_cancelled", [this](){return this->mining.cancelled;}, nullptr);
-	builder.AddBooleanProperty("state/offload_enabled", [this](){return this->offload.enabled;}, nullptr);
-	builder.AddBooleanProperty("state/offload_cancelled", [this](){return this->offload.cancelled;}, nullptr);
-	builder.AddBooleanProperty("state/traversal_enabled", [this](){return this->traversal.enabled;}, nullptr);
-	builder.AddBooleanProperty("state/traversal_cancelled", [this](){return this->traversal.cancelled;}, nullptr);
+	builder.AddBooleanProperty("state/mining/enabled", [this](){return this->mining.enabled;}, nullptr);
+	builder.AddBooleanProperty("state/mining/cancelled", [this](){return this->mining.cancelled;}, nullptr);
+	builder.AddBooleanProperty("state/offload/enabled", [this](){return this->offload.enabled;}, nullptr);
+	builder.AddBooleanProperty("state/offload/cancelled", [this](){return this->offload.cancelled;}, nullptr);
+	builder.AddBooleanProperty("state/traversal/enabled", [this](){return this->traversal.enabled;}, nullptr);
+	builder.AddBooleanProperty("state/traversal/cancelled", [this](){return this->traversal.cancelled;}, nullptr);
 	// builder.AddIntegerProperty("state/mining_stage", [this](){return static_cast<int>(this->mining.stage);}, nullptr);
 	// builder.AddIntegerProperty("state/offload_stage", [this](){return static_cast<int>(this->offload.stage);}, nullptr);
 	// builder.AddIntegerProperty("state/mining_serial_control_state", [this](){return static_cast<int>(this->mining.serial_control);}, nullptr);
 	// builder.AddIntegerProperty("state/offload_serial_control_state", [this](){return static_cast<int>(this->offload.serial_control);}, nullptr);
 	// builder.AddIntegerProperty("state/control_level", [this](){return static_cast<int>(this->control_level);}, nullptr);
+
+	builder.AddIntegerProperty("state/traversal/left_keyframes_size", [this](){return this->traversal.leftTrackControlVelocity.size();}, nullptr);
+	builder.AddIntegerProperty("state/traversal/right_keyframes_size", [this](){return this->traversal.rightTrackControlVelocity.size();}, nullptr);
 
 	builder.AddDoubleProperty("state/driving_speed_scalar", [this](){return this->driving_speed_scalar;}, nullptr);
 	builder.AddDoubleProperty("tuning/mining_runtime", [this](){return this->mining.target_mining_time;}, [this](double v){this->mining.target_mining_time = v;});
@@ -218,14 +203,14 @@ void Robot::State::InitSendable(wpi::SendableBuilder& builder)
 	builder.AddDoubleProperty("tuning/offload_dump_time", [this](){return this->offload.target_dump_time;}, [this](double v){this->offload.target_dump_time = v;});
 
 	builder.AddStringProperty("state/control_level", [this](){return CONTROL_LEVEL_NAMES[static_cast<int>(this->control_level)];}, nullptr);
-	builder.AddStringProperty("state/mining_stage", [this](){return MINING_STAGE_NAMES[static_cast<int>(this->mining.stage)];}, nullptr);
-	builder.AddStringProperty("state/offload_stage", [this](){return OFFLOAD_STAGE_NAMES[static_cast<int>(this->offload.stage)];}, nullptr);
-	builder.AddStringProperty("state/traversal_stage", [this](){return TRAVERSAL_STAGE_NAMES[static_cast<int>(this->traversal.stage)];}, nullptr);
+	builder.AddStringProperty("state/mining/stage", [this](){return MINING_STAGE_NAMES[static_cast<int>(this->mining.stage)];}, nullptr);
+	builder.AddStringProperty("state/offload/stage", [this](){return OFFLOAD_STAGE_NAMES[static_cast<int>(this->offload.stage)];}, nullptr);
+	builder.AddStringProperty("state/traversal/stage", [this](){return TRAVERSAL_STAGE_NAMES[static_cast<int>(this->traversal.stage)];}, nullptr);
 };
 
 
 
-Robot::Robot() //:
+Robot::Robot() //: TimedRobot{ 0.005_s }
 	/*telemetry_sender{ "Robot" }*/
 {
 	this->serial.port.SetTimeout(units::second_t{ 0.1 });
@@ -398,9 +383,9 @@ void Robot::cancel_offload()
 	}
 }
 
-void Robot::start_traversal(Robot::State::ControlLevel op_level)
+void Robot::start_traversal()
 {
-	this->state.handle_change_control_level(op_level);
+	this->state.handle_change_control_level(Robot::State::ControlLevel::TELEAUTO_OP);
 	if( !this->state.mining.enabled && !this->state.offload.enabled && !this->state.traversal.enabled &&
 		this->state.control_level != Robot::State::ControlLevel::MANUAL)
 	{
@@ -419,18 +404,15 @@ void Robot::cancel_traversal()
 		switch(this->state.control_level)
 		{
 			case Robot::State::ControlLevel::FULL_AUTO:
-			{
-				this->state.traversal.cancelled = true;	// trigger automated exit
-				break;
-			}
 			case Robot::State::ControlLevel::MANUAL:
 			case Robot::State::ControlLevel::TELEAUTO_OP:
 			default:
 			{
-				this->stop_all();			// hard stop... and reset all states
+				this->state.traversal.cancelled = true;	// trigger automated exit // TODO
+				// this->stop_all();			// hard stop... and reset all states
 
-				this->state.traversal.enabled = false;
-				this->state.traversal.stage = Robot::State::TraversalStage::FINISHED;
+				// this->state.traversal.enabled = false;
+				// this->state.traversal.stage = Robot::State::TraversalStage::FINISHED;
 			}
 		}
 	}
@@ -847,13 +829,10 @@ void Robot::periodic_handle_offload()
 
 void Robot::periodic_handle_traversal()
 {
-	if(this->state.traversal.enabled) {
-		const bool
-			is_full_auto = this->state.control_level == Robot::State::ControlLevel::FULL_AUTO,
-			cancelled = this->state.traversal_is_soft_shutdown();
-
-
-		switch(this->state.traversal.stage) {
+	if(this->state.traversal.enabled)
+	{
+		switch(this->state.traversal.stage)
+		{
 			case Robot::State::TraversalStage::INITIALIZING:
 			{
 				this->state.traversal.lduration = state.traversal.leftTrackControltime.front();
@@ -873,56 +852,63 @@ void Robot::periodic_handle_traversal()
 			}
 			case Robot::State::TraversalStage::TRAVERSE:
 			{
+				const bool
+					left_has_any = this->state.traversal.leftTrackControltime.size() > 0,
+					right_has_any = this->state.traversal.rightTrackControltime.size() > 0;
 
-				if( !cancelled && (is_full_auto) && this->state.traversal.leftTrackControltime.size() > 0 && this->state.traversal.rightTrackControltime.size() > 0)
+				if(!this->state.traversal.cancelled && left_has_any || right_has_any)
 				{
-					if(util::seconds_since(this->state.traversal.leftTrackStartCycleTime) >= this->state.traversal.lduration){
-						this->state.traversal.leftTrackStartCycleTime = system_time::now();
-						this->state.traversal.lduration = this->state.traversal.leftTrackControltime.front();
-						this->state.traversal.curLeftVelo = this->state.traversal.leftTrackControlVelocity.front();
-						this->state.traversal.leftTrackControltime.pop();
-						this->state.traversal.leftTrackControlVelocity.pop();
-					
-					}
-					else{
-						ctre::phoenix6::controls::VelocityVoltage
-						vel_command_left{
-							this->state.traversal.curLeftVelo,
-							Robot::MOTOR_SETPOINT_ACC,
-							false
-						};
-						track_left.SetControl(vel_command_left);
-					}
-					if(util::seconds_since(this->state.traversal.rightTrackStartCycleTime) >= this->state.traversal.rduration){
-						this->state.traversal.rightTrackStartCycleTime = system_time::now();
-						this->state.traversal.rduration = this->state.traversal.rightTrackControltime.front();
-						this->state.traversal.curRightVelo = this->state.traversal.rightTrackControlVelocity.front();
-						this->state.traversal.rightTrackControltime.pop();
-						this->state.traversal.rightTrackControlVelocity.pop();
-					}
-					else{
-						ctre::phoenix6::controls::VelocityVoltage
-						vel_command_right{
-							this->state.traversal.curRightVelo,
-							Robot::MOTOR_SETPOINT_ACC,
-							false
-						};
-						track_right.SetControl(vel_command_right);
-					}
-
-		
+					if(left_has_any) {
+						if(util::seconds_since(this->state.traversal.leftTrackStartCycleTime) >= this->state.traversal.lduration){
+							this->state.traversal.leftTrackStartCycleTime = system_time::now();
+							this->state.traversal.lduration = this->state.traversal.leftTrackControltime.front();
+							this->state.traversal.curLeftVelo = this->state.traversal.leftTrackControlVelocity.front();
+							this->state.traversal.leftTrackControltime.pop();
+							this->state.traversal.leftTrackControlVelocity.pop();
+						}
+						else{
+							ctre::phoenix6::controls::VelocityVoltage
+								vel_command_left{
+									this->state.traversal.curLeftVelo,
+									Robot::MOTOR_SETPOINT_ACC,
+									false
+								};
+							track_left.SetControl(vel_command_left);
+						}
+					} else track_left.Set(0);
+					if(right_has_any)
+					{
+						if(util::seconds_since(this->state.traversal.rightTrackStartCycleTime) >= this->state.traversal.rduration){
+							this->state.traversal.rightTrackStartCycleTime = system_time::now();
+							this->state.traversal.rduration = this->state.traversal.rightTrackControltime.front();
+							this->state.traversal.curRightVelo = this->state.traversal.rightTrackControlVelocity.front();
+							this->state.traversal.rightTrackControltime.pop();
+							this->state.traversal.rightTrackControlVelocity.pop();
+						}
+						else{
+							ctre::phoenix6::controls::VelocityVoltage
+								vel_command_right{
+									this->state.traversal.curRightVelo,
+									Robot::MOTOR_SETPOINT_ACC,
+									false
+								};
+							track_right.SetControl(vel_command_right);
+						}
+					} else track_left.Set(0);
 					break;
 				}
 				else
 				{
 					track_left.Set(0);
 					track_right.Set(0);
+					this->state.traversal.stage = Robot::State::TraversalStage::FINISHED;
 					// fallthrough to apply next stage
 				}
 			}
 			case Robot::State::TraversalStage::FINISHED:
 			{
 				this->stop_all();
+
 				this->state.traversal.enabled = false;
 				this->state.handle_change_control_level(Robot::State::ControlLevel::MANUAL);
 			}
@@ -934,18 +920,23 @@ void Robot::periodic_handle_traversal()
 	}
 }
 
-void Robot::record_tracks()
+void Robot::periodic_handle_record_tracks()
 {
-	if(this->state.traversal.start_recording){
+	if(this->state.traversal.start_recording)
+	{
 		units::angular_velocity::turns_per_second_t leftVelo = track_left.GetVelocity().GetValue();
 		units::angular_velocity::turns_per_second_t rightVelo = track_right.GetVelocity().GetValue();
-		if(this->state.traversal.prevLeftVelo != leftVelo){
+		const double tollerance_tps = 1.0;
+
+		if(std::abs((this->state.traversal.prevLeftVelo - leftVelo).value()) > tollerance_tps)
+		{
 			this->state.traversal.leftTrackControltime.push(util::seconds_since(this->state.traversal.lastLeftTrackTime));
 			this->state.traversal.leftTrackControlVelocity.push(leftVelo);
 			this->state.traversal.prevLeftVelo = leftVelo;
 			this->state.traversal.lastLeftTrackTime = system_time::now();
 		}
-		if(this->state.traversal.prevRightVelo != rightVelo){
+		if(std::abs((this->state.traversal.prevRightVelo - rightVelo).value()) > tollerance_tps)
+		{
 			this->state.traversal.rightTrackControltime.push(util::seconds_since(this->state.traversal.lastRightTrackTime));
 			this->state.traversal.rightTrackControlVelocity.push(rightVelo);
 			this->state.traversal.prevRightVelo = rightVelo;
@@ -977,7 +968,7 @@ void Robot::periodic_handle_teleop_input()
 		this->state.last_manual_control_level = this->state.control_level;
 		this->cancel_mining();
 		this->cancel_offload();
-    this->cancel_traversal();
+		this->cancel_traversal();
 		return;
 		// this->disable_serial();	// resets internal serial_control states
 	}
@@ -1003,16 +994,33 @@ void Robot::periodic_handle_teleop_input()
 		if(is_teleauto && is_offload && logitech.GetPOV(0) == Robot::TELEAUTO_OFFLOAD_STOP_POV) {	// dpad left
 			this->cancel_mining();
 		}
-		if(!any_ops_running && logitech.GetRawButtonPressed(Robot::TELEOP_HOPPER_INVERT_BUTTON_IDX)){ //left bumper
-			if(!this->state.traversal.start_recording){
-				this->state.traversal.start_recording = true;
-			}
-			else{
+		if( !any_ops_running && logitech.GetRawButtonPressed(LogitechConstants::BUTTON_BACK) &&
+			this->state.control_level != Robot::State::ControlLevel::TELEAUTO_OP)	// TODO: not technically correct
+		{
+			if(!this->state.traversal.start_recording) this->state.traversal.start_recording = true;
+			else
+			{
 				this->state.traversal.start_recording = false;
+
+				units::angular_velocity::turns_per_second_t leftVelo = track_left.GetVelocity().GetValue();
+				units::angular_velocity::turns_per_second_t rightVelo = track_right.GetVelocity().GetValue();
+
+				if(this->state.traversal.prevLeftVelo != leftVelo)
+				{
+					this->state.traversal.leftTrackControltime.push(util::seconds_since(this->state.traversal.lastLeftTrackTime));
+					this->state.traversal.leftTrackControlVelocity.push(leftVelo);
+				}
+				if(this->state.traversal.prevRightVelo != rightVelo)
+				{
+					this->state.traversal.rightTrackControltime.push(util::seconds_since(this->state.traversal.lastRightTrackTime));
+					this->state.traversal.rightTrackControlVelocity.push(rightVelo);
+				}
+
 			}
 		}
-		if(!any_ops_running && logitech.GetRawButtonPressed(LogitechConstants::BUTTON_START)){
-			this->start_traversal(Robot::State::ControlLevel::FULL_AUTO);
+		if(!any_ops_running && logitech.GetRawButtonPressed(LogitechConstants::BUTTON_START))
+		{
+			this->start_traversal();
 		}
 	}
 
@@ -1121,6 +1129,8 @@ void Robot::RobotInit()
 	this->disable_motors();
 	this->disable_serial();
 
+	this->AddPeriodic(std::bind(&Robot::periodic_handle_traversal, this), 0.05_s);
+
 	// this->telemetry_sender.putData(this);
 	frc::SmartDashboard::PutData("robot", this);
 
@@ -1141,6 +1151,7 @@ void Robot::RobotPeriodic()
 	// run periodic control
 	this->periodic_handle_mining();
 	this->periodic_handle_offload();
+	// this->periodic_handle_traversal();
 
 	// this->telemetry_sender.updateValues();
 }
@@ -1166,7 +1177,7 @@ void Robot::TeleopInit()
 void Robot::TeleopPeriodic()
 {
 	this->periodic_handle_teleop_input();
-	this->record_tracks();
+	this->periodic_handle_record_tracks();
 }
 
 void Robot::TeleopExit()
